@@ -1,9 +1,9 @@
 /* Bones & Brine service worker: lets the installed app open instantly and play offline
    (pass & play and bots; online matches still need a connection). Bump VERSION on each release. */
-const VERSION = 'bnb-v7';
+const VERSION = 'bnb-v8';
 const CORE = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/engine.js', 'js/bot.js', 'js/dice.js', 'js/avatar.js', 'js/net.js', 'js/app.js', 'js/avatar3d.js', 'models/pirates.js'
+  'js/engine.js', 'js/bot.js', 'js/dice.js', 'js/avatar.js', 'js/net.js', 'js/config.js', 'js/auth.js', 'js/app.js', 'js/avatar3d.js', 'models/pirates.js'
 ];
 
 self.addEventListener('install', e => {

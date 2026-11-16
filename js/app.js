@@ -120,8 +120,13 @@
   let customKits = (store.get('bnb.kits', []) || []).map(Dice.sanitize).filter(Boolean).map(k => ({ ...k, custom: true }));
   const allKits = () => Dice.PRESETS.concat(customKits);
   const kitById = id => allKits().find(k => k.id === id) || Dice.PRESETS[0];
-  function saveProfile() { store.set('bnb.profile', profile); renderMenuProfile(); }
-  const saveKits = () => store.set('bnb.kits', customKits);
+  /** Everything about yer pirate that is saved to a signed-in account in the cloud. */
+  const cloudData = () => ({ coins: profile.coins, inv: profile.inv, data: { avatar: profile.avatar, kitId: profile.kitId, kits: customKits } });
+  function saveProfile() {
+    store.set('bnb.profile', profile); renderMenuProfile();
+    if (Auth.me) Auth.save(cloudData());
+  }
+  const saveKits = () => { store.set('bnb.kits', customKits); if (Auth.me) Auth.save(cloudData()); };
 
   // ---------- screens ----------
   let current = 'menu';
@@ -158,6 +163,9 @@
   function renderLocker() {
     renderLockerPreview();
     if (document.activeElement !== $('#locker-name')) $('#locker-name').value = profile.name;
+    const locked = !!Auth.me;      // signed-in pirates are known by their username
+    $('#locker-name').disabled = locked; $('#locker-randname').disabled = locked;
+    $('#locker-name').title = locked ? 'Yer name is yer account username' : '';
     const k = kitById(profile.kitId);
     $('#locker-kit').innerHTML = [1, 3, 5].map(f => Dice.render(f, k, 34)).join('') + `<span>${esc(k.name)}</span>`;
     const a = profile.avatar;
@@ -375,10 +383,12 @@
   const Online = { role: null, code: '', seats: [], rules: { ...savedRules }, started: false };
   const setStatus = m => { $('#online-status').textContent = m; };
   const myProfilePayload = () => ({ name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId) });
-  const publicSeat = x => ({ id: x.id, name: x.name, avatar: x.avatar, kit: x.kit, bot: x.bot });
+  // `account` = the server-verified username (null for guests); `admin` = verified admin
+  const publicSeat = x => ({ id: x.id, name: x.name, avatar: x.avatar, kit: x.kit, bot: x.bot, account: x.account || null, admin: !!x.admin });
   function sanitizeSeat(x) {
     return { id: String(x && x.id || '').slice(0, 80), name: cleanName(x && x.name), avatar: Avatar.sanitize(x && x.avatar),
-      kit: Dice.sanitize(x && x.kit) || Dice.PRESETS[0], bot: x && x.bot ? { persona: Bot.PERSONAS[x.bot.persona] ? x.bot.persona : 'balanced' } : null };
+      kit: Dice.sanitize(x && x.kit) || Dice.PRESETS[0], bot: x && x.bot ? { persona: Bot.PERSONAS[x.bot.persona] ? x.bot.persona : 'balanced' } : null,
+      account: x && typeof x.account === 'string' ? x.account.slice(0, 16) : null, admin: !!(x && x.admin) };
   }
   function sanitizeRules(r) {
     r = r || {};
@@ -392,7 +402,7 @@
       $('#host-btn').disabled = false; setStatus('');
       Online.role = 'host'; Online.code = code; Online.started = false;
       Online.rules = { ...savedRules };
-      Online.seats = [{ id: 'host', ...myProfilePayload(), bot: null }];
+      Online.seats = [{ id: 'host', ...myProfilePayload(), bot: null, account: Auth.me ? Auth.me.username : null, admin: Auth.isAdmin }];
       go('lobby');
     }, e => { $('#host-btn').disabled = false; setStatus(Net.describe(e)); leaveOnline(); });
   });
@@ -400,9 +410,12 @@
     const code = $('#join-code').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (code.length < 4) { setStatus('Enter the room code from yer captain.'); return; }
     setStatus('Rowing out to the ship…'); $('#join-btn').disabled = true;
-    Net.join(code, () => {
+    Net.join(code, async () => {
       $('#join-btn').disabled = false; Online.role = 'client'; Online.code = code;
-      Net.send({ t: 'join', profile: myProfilePayload() });
+      // signed-in pirates prove who they are with their sign-in token; the host checks it with the server
+      let token = null;
+      try { token = await Auth.token(); } catch (_) {}
+      Net.send({ t: 'join', profile: myProfilePayload(), token });
       setStatus('Boarding…');
     }, e => { $('#join-btn').disabled = false; setStatus(Net.describe(e)); leaveOnline(); });
   }
@@ -422,9 +435,9 @@
       return `<div class="seat-row">${Avatar.render(x.avatar, 48)}
         <div class="sr-main"><span class="sr-name">${x.bot ? '🤖 ' : ''}${esc(x.name)}</span>
           ${x.bot ? (host ? personaSelect(x.bot.persona, `data-lpersona="${i}"`) : `<span class="tag bot">${esc(Bot.PERSONAS[x.bot.persona].label)}</span>`)
-            : `<span class="tag ${isMe ? 'you' : ''}">${x.id === 'host' ? 'Captain' : 'Crew'}${isMe ? ' · You' : ''}</span>`}
+            : `<span class="tag ${isMe ? 'you' : ''}">${x.id === 'host' ? 'Captain' : 'Crew'}${isMe ? ' · You' : ''}${x.admin ? ' · 👑 Admin' : x.account ? ' · ✔ Account' : ' · Guest'}</span>`}
         </div>
-        <span class="sr-btns">${Dice.render(6, x.kit, 32)}${host && x.id !== myId ? `<button class="x-btn" data-kick="${esc(x.id)}" title="${x.bot ? 'Remove bot' : 'Make them walk the plank'}">✕</button>` : ''}</span>
+        <span class="sr-btns">${Dice.render(6, x.kit, 32)}${(host ? x.id !== myId : (Auth.isAdmin && x.id !== 'host' && x.id !== Online.myId)) ? `<button class="x-btn" data-kick="${esc(x.id)}" title="${x.bot ? 'Remove bot' : 'Make them walk the plank'}">✕</button>` : ''}</span>
       </div>`;
     }).join('') + (Online.seats.length < MAX_SEATS ? `<p class="hint">${MAX_SEATS - Online.seats.length} seat(s) free — share the code, or add bots.</p>` : '');
     $('#lobby-host-ctrls').classList.toggle('hidden', !host);
@@ -446,12 +459,22 @@
     Online.seats.push({ id: 'bot-' + Math.random().toString(36).slice(2, 8), name: b.name, avatar: b.avatar, kit: b.kit, bot: { persona: b.persona } });
     Sfx.click(); hostLobbyBroadcast();
   });
-  $('#lobby-seats').addEventListener('click', e => {
-    const b = e.target.closest('[data-kick]'); if (!b || Online.role !== 'host') return;
-    const id = b.dataset.kick, i = Online.seats.findIndex(x => x.id === id); if (i < 0) return;
+  /** Host: remove a pirate from the lobby, or mid-game hand their seat to a bot. */
+  function hostKick(id, reason = 'The captain made ye walk the plank.') {
+    const i = Online.seats.findIndex(x => x.id === id); if (i < 0) return;
     const seat = Online.seats[i];
-    if (!seat.bot) { Net.sendTo(id, { t: 'error', msg: 'The captain made ye walk the plank.' }); setTimeout(() => Net.drop(id), 300); }
-    Online.seats.splice(i, 1); hostLobbyBroadcast();
+    if (seat.id === 'host') return;
+    if (!seat.bot) { Net.sendTo(id, { t: 'error', msg: reason }); setTimeout(() => Net.drop(id), 300); }
+    Online.seats.splice(i, 1);
+    if (G.s && G.mode === 'host') {
+      const p = G.s.players.find(q => q.id === id);
+      if (p && !p.bot) { p.bot = { persona: 'balanced' }; toast(`${p.name} was thrown overboard — a bot takes the seat`); update(true); }
+    } else hostLobbyBroadcast();
+  }
+  $('#lobby-seats').addEventListener('click', e => {
+    const b = e.target.closest('[data-kick]'); if (!b) return;
+    if (Online.role === 'host') hostKick(b.dataset.kick);
+    else if (Auth.isAdmin) Net.send({ t: 'admin', cmd: 'kick', id: b.dataset.kick });
   });
   $('#lobby-seats').addEventListener('change', e => {
     const i = e.target.dataset.lpersona; if (i == null) return;
@@ -476,20 +499,33 @@
     if (!msg || typeof msg !== 'object') return;
     if (Online.role === 'host') hostHandle(from, msg); else if (Online.role === 'client') clientHandle(msg);
   });
-  function hostHandle(id, msg) {
-    if (msg.t === 'join') {
-      if (Online.started) { Net.sendTo(id, { t: 'error', msg: 'That ship has already set sail — wait for the next game.' }); setTimeout(() => Net.drop(id), 400); return; }
-      const prof = sanitizeSeat({ ...(msg.profile || {}), id });
-      const existing = Online.seats.find(x => x.id === id);
+  async function hostJoin(id, msg) {
+    if (Online.started) { Net.sendTo(id, { t: 'error', msg: 'That ship has already set sail — wait for the next game.' }); setTimeout(() => Net.drop(id), 400); return; }
+    const prof = sanitizeSeat({ ...(msg.profile || {}), id, account: null, admin: false });
+    if (msg.token && Auth.enabled) {
+      // never trust what a player claims: ask the account server who this really is
+      let v = null;
+      try { v = await Auth.verify(String(msg.token)); } catch (_) {}
+      if (v && v.banned) { Net.sendTo(id, { t: 'error', msg: 'This account has been banned from Bones & Brine.' }); setTimeout(() => Net.drop(id), 400); return; }
+      if (v) { prof.name = cleanName(v.username); prof.account = v.username; prof.admin = !!v.is_admin; }
+    }
+    if (Online.started) return;
+    const existing = Online.seats.find(x => x.id === id);
       if (existing) Object.assign(existing, prof);
       else {
         const humans = Online.seats.filter(x => !x.bot).length;
         if (Online.seats.length >= MAX_SEATS || humans >= MAX_HUMANS) { Net.sendTo(id, { t: 'error', msg: 'That ship is full, matey.' }); setTimeout(() => Net.drop(id), 400); return; }
         Online.seats.push({ ...prof, bot: null });
-        toast(`${prof.name} climbed aboard`); Sfx.bid();
+        toast(`${prof.name}${prof.admin ? ' 👑' : ''} climbed aboard`); Sfx.bid();
       }
       Net.sendTo(id, { t: 'welcome', id });
       hostLobbyBroadcast();
+  }
+  function hostHandle(id, msg) {
+    if (msg.t === 'join') { hostJoin(id, msg); return; }
+    if (msg.t === 'admin') {
+      const seat = Online.seats.find(x => x.id === id);
+      if (seat && seat.admin) adminCommand(id, msg);   // only server-verified admins
       return;
     }
     if (!G.s || G.mode !== 'host') return;
@@ -514,7 +550,7 @@
         if (G.s) endGame();
         if (current !== 'lobby') go('lobby'); else renderLobby();
         break;
-      case 'state': if (msg.s) receive(msg.s, Number(msg.you) | 0, Number(msg.turnLeft) || 0); break;
+      case 'state': if (msg.s) { G.xrayFeed = !!msg.xray; receive(msg.s, Number(msg.you) | 0, Number(msg.turnLeft) || 0); } break;
       case 'taunt': showTaunt(Number(msg.seat) | 0, Number(msg.i) | 0); break;
       case 'use': if (shopItem(msg.id)) showUse(Number(msg.seat) | 0, msg.id); break;
       case 'error': toast(String(msg.msg || 'Something went wrong').slice(0, 120), 4000); endGame(); leaveOnline(); go('online'); break;
@@ -683,7 +719,12 @@
   }
   function broadcastState() {
     const s = G.s, left = G.turnDeadline ? Math.max(0, G.turnDeadline - Date.now()) : 0;
-    s.players.forEach((p, i) => { if (!p.bot && p.id !== 'host') Net.sendTo(p.id, { t: 'state', s: Engine.viewFor(s, i), you: i, turnLeft: left }); });
+    s.players.forEach((p, i) => {
+      if (p.bot || p.id === 'host') return;
+      const seat = Online.seats.find(x => x.id === p.id);
+      const xray = !!(seat && seat.admin && seat.xray);       // verified admin with X-ray on sees every cup
+      Net.sendTo(p.id, { t: 'state', s: xray ? JSON.parse(JSON.stringify(s)) : Engine.viewFor(s, i), you: i, turnLeft: left, xray });
+    });
   }
 
   // --- "You" instead of your own name -------------------------------------------
@@ -933,9 +974,14 @@
         : Array.from({ length: p.count }, () => `<i class="mini" style="background:${p.kit.face};border-color:${p.kit.edge}"></i>`).join('');
       const fr = seatFrame(i, now);
       G.seatFrameKey[i] = fr.key;
-      el.innerHTML = `${bubble}<div class="av ${fr.chew ? 'chewing' : ''}" data-seat="${i}">${seatPortraitHTML(p, fr)}</div><div class="s-name">${p.bot ? '<span class="bot-tag">🤖</span>' : ''}${nm(i)}</div><div class="s-cups">${cups}</div>`;
+      el.innerHTML = `${bubble}<div class="av ${fr.chew ? 'chewing' : ''}" data-seat="${i}">${seatPortraitHTML(p, fr)}</div><div class="s-name">${p.bot ? '<span class="bot-tag">🤖</span>' : ''}${nm(i)}</div><div class="s-cups">${cups}</div>${xrayHTML(i, p)}`;
       tbl.appendChild(el);
     });
+  }
+  /** Admin X-ray: the dice under another pirate's cup, shown under their seat. */
+  function xrayHTML(i, p) {
+    if (!showXray() || G.s.phase !== 'bidding' || i === mySeatIdx() || !p.dice || !p.dice.length) return '';
+    return `<div class="xray" title="X-ray">${p.dice.map(d => Dice.render(d, p.kit, 18)).join('')}</div>`;
   }
   function seatPx() {
     const t = $('#g-table'), w = t.clientWidth || 800, h = t.clientHeight || 500;
@@ -1268,6 +1314,203 @@
   let resizeT;
   window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (G.s && current === 'game') { renderSeats(); renderHand(); } }, 120); });
 
+  // =====================================================================
+  //  ACCOUNTS & ADMIN
+  // =====================================================================
+  const ITEM_IDS = SHOP.map(x => x.id);
+  const mySeatIdx = () => G.mode === 'local' ? walletSeat() : G.me;
+  const showXray = () => Auth.isAdmin && G.xray && (G.mode !== 'client' || G.xrayFeed);
+
+  /** Host: carry out a command from a server-verified admin (checked in hostHandle). */
+  function adminCommand(fromId, msg) {
+    const seat = Online.seats.find(x => x.id === fromId);
+    if (msg.cmd === 'kick' && msg.id && msg.id !== fromId) hostKick(String(msg.id), 'An admin threw ye off the ship.');
+    else if (msg.cmd === 'xray' && seat) { seat.xray = !!msg.on; if (G.s && G.mode === 'host') broadcastState(); }
+    else if (msg.cmd === 'setDice' && G.s && G.mode === 'host') rigDice(G.s.players.findIndex(p => p.id === fromId), msg.dice);
+  }
+  /** Replace a seat's dice for this round (admin only). */
+  function rigDice(i, dice) {
+    const s = G.s, p = s && s.players[i];
+    if (!p || p.out || s.phase !== 'bidding' || !Array.isArray(dice) || dice.length !== p.dice.length) return false;
+    p.dice = dice.map(d => Math.max(1, Math.min(6, d | 0)));
+    if (G.mode === 'host') broadcastState();
+    render();
+    return true;
+  }
+
+  // --- in-game 👑 panel ---
+  function renderAdminTray() {
+    const s = G.s; if (!s) return;
+    const me = mySeatIdx(), mine = s.players[me];
+    if (!G.rigDraft || G.rigDraft.length !== (mine ? mine.dice.length : 0)) G.rigDraft = mine ? mine.dice.slice() : [];
+    const canRig = mine && !mine.out && s.phase === 'bidding' && mine.dice.length;
+    const others = G.mode === 'local' ? [] : s.players.map((p, i) => ({ p, i, seat: Online.seats.find(x => x.id === p.id) }))
+      .filter(o => o.i !== me && !o.p.bot && !(G.mode === 'client' && o.p.id === 'host'));   // the captain can't be kicked off their own ship
+    $('#admin-tray').innerHTML = `
+      <div class="tray-head">👑 Admin powers</div>
+      <label class="adm-row"><input type="checkbox" id="adm-xray" ${G.xray ? 'checked' : ''}> <span><b>X-ray</b> — see everyone's dice</span></label>
+      <div class="adm-block"><b>Rig yer dice</b> <small>(tap a die to change it)</small>
+        <div class="rig">${canRig ? G.rigDraft.map((d, k) => `<button data-rig="${k}">${Dice.render(d, mine.kit, 34)}</button>`).join('') : '<small>Only during wagering, while ye still have dice.</small>'}</div>
+        ${canRig ? '<button class="btn small primary" id="adm-rig-go">Use these dice</button>' : ''}
+      </div>
+      ${G.mode === 'local' ? '' : `<div class="adm-block"><b>Players</b>${others.length ? others.map(o => `
+        <div class="adm-player"><span>${esc(o.p.name)} <small>${o.seat && o.seat.account ? '✔ account' : 'guest'}</small></span>
+          <button class="btn small" data-akick="${esc(o.p.id)}">Kick</button>
+          ${o.seat && o.seat.account ? `<button class="btn small danger" data-aban="${esc(o.p.id)}">Ban</button>` : ''}</div>`).join('') : '<small>No other human pirates aboard.</small>'}</div>`}`;
+  }
+  $('#g-admin-btn').addEventListener('click', () => {
+    $('#taunt-tray').classList.add('hidden'); $('#item-tray').classList.add('hidden');
+    G.rigDraft = null; renderAdminTray(); $('#admin-tray').classList.toggle('hidden');
+  });
+  $('#admin-tray').addEventListener('change', e => {
+    if (e.target.id !== 'adm-xray') return;
+    G.xray = e.target.checked;
+    if (G.mode === 'client') Net.send({ t: 'admin', cmd: 'xray', on: G.xray });
+    render();
+  });
+  $('#admin-tray').addEventListener('click', async e => {
+    const rig = e.target.closest('[data-rig]');
+    if (rig) { const k = Number(rig.dataset.rig); G.rigDraft[k] = G.rigDraft[k] % 6 + 1; renderAdminTray(); return; }
+    if (e.target.closest('#adm-rig-go')) {
+      if (G.mode === 'client') Net.send({ t: 'admin', cmd: 'setDice', dice: G.rigDraft });
+      else rigDice(mySeatIdx(), G.rigDraft);
+      toast('🎲 Dice rigged for this round'); $('#admin-tray').classList.add('hidden');
+      return;
+    }
+    const kick = e.target.closest('[data-akick]');
+    const ban = e.target.closest('[data-aban]');
+    const id = (kick || ban) && (kick || ban).dataset[kick ? 'akick' : 'aban'];
+    if (!id) return;
+    const seat = Online.seats.find(x => x.id === id);
+    if (ban) {
+      if (!seat || !seat.account) return;
+      if (!confirm(`Ban ${seat.account}? They won't be able to sign in or join games until unbanned in the Admin Desk.`)) return;
+      try { await Auth.admin.setBan(seat.account, true); toast(`${seat.account} is banned`); }
+      catch (err) { toast(err.message, 4000); return; }
+    }
+    if (G.mode === 'host') hostKick(id, ban ? 'Ye have been banned from Bones & Brine.' : 'An admin threw ye off the ship.');
+    else Net.send({ t: 'admin', cmd: 'kick', id });
+    $('#admin-tray').classList.add('hidden');
+  });
+
+  // --- Admin Desk (menu): look up any pirate, give/take doubloons and goods, ban/unban ---
+  let deskUser = null;
+  function renderDesk(r) {
+    deskUser = r;
+    if (!r) { $('#adm-result').innerHTML = ''; return; }
+    $('#adm-result').innerHTML = `
+      <div class="adm-card">
+        <h3>${esc(r.username)} ${r.is_admin ? '👑' : ''} ${r.banned ? '<span class="tag banned">BANNED</span>' : ''}</h3>
+        <small>Joined ${new Date(r.created_at).toLocaleDateString()}</small>
+        <div class="adm-line"><span>🪙 <b>${r.coins}</b> doubloons</span>
+          ${[-5, -1, 1, 5].map(d => `<button class="btn small" data-coins="${d}">${d > 0 ? '+' : ''}${d}</button>`).join('')}
+          <input id="adm-coin-n" type="number" placeholder="±n" style="width:5em"><button class="btn small" data-coins="custom">Apply</button></div>
+        ${SHOP.map(it => `<div class="adm-line"><span>${it.emoji} ${esc(it.name)}: <b>${(r.inv || {})[it.id] | 0}</b></span>
+          <button class="btn small" data-item="${it.id}" data-q="-1">−1</button><button class="btn small" data-item="${it.id}" data-q="1">+1</button></div>`).join('')}
+        ${r.is_admin ? '' : `<button class="btn ${r.banned ? 'primary' : 'danger'}" data-ban="${r.banned ? 0 : 1}">${r.banned ? 'Unban' : 'Ban this pirate'}</button>`}
+      </div>`;
+  }
+  async function deskRun(fn, okMsg) {
+    $('#adm-status').textContent = 'Working…';
+    try {
+      await fn();
+      renderDesk(await Auth.admin.lookup(deskUser.username));
+      $('#adm-status').textContent = okMsg;
+      if (Auth.me && deskUser && deskUser.username === Auth.me.username) {   // edited yerself: refresh yer purse
+        const fresh = await Auth.restore(); if (fresh) applyAccount(fresh);
+      }
+    } catch (err) { $('#adm-status').textContent = err.message; }
+  }
+  $('#adm-find').addEventListener('click', async () => {
+    const u = $('#adm-user').value.trim();
+    if (!u) return;
+    $('#adm-status').textContent = 'Searching…';
+    try { const r = await Auth.admin.lookup(u); renderDesk(r); $('#adm-status').textContent = r ? '' : `No pirate called "${u}".`; }
+    catch (err) { renderDesk(null); $('#adm-status').textContent = err.message; }
+  });
+  $('#adm-user').addEventListener('keydown', e => { if (e.key === 'Enter') $('#adm-find').click(); });
+  $('#adm-result').addEventListener('click', e => {
+    if (!deskUser) return;
+    const c = e.target.closest('[data-coins]'), it = e.target.closest('[data-item]'), b = e.target.closest('[data-ban]');
+    if (c) {
+      const d = c.dataset.coins === 'custom' ? Number($('#adm-coin-n').value) | 0 : Number(c.dataset.coins);
+      if (d) deskRun(() => Auth.admin.addCoins(deskUser.username, d), `${d > 0 ? 'Gave' : 'Took'} ${Math.abs(d)} doubloon(s).`);
+    } else if (it) deskRun(() => Auth.admin.giveItem(deskUser.username, it.dataset.item, Number(it.dataset.q)), 'Goods updated.');
+    else if (b) {
+      const banIt = b.dataset.ban === '1';
+      if (banIt && !confirm(`Ban ${deskUser.username}?`)) return;
+      deskRun(() => Auth.admin.setBan(deskUser.username, banIt), banIt ? 'Banned.' : 'Unbanned.');
+    }
+  });
+  onShow.admin = () => { if (!Auth.isAdmin) { go('menu'); return; } $('#adm-status').textContent = ''; };
+
+  // --- sign in / create account ---
+  let accTab = 'signin';
+  function setAccTab(t) {
+    accTab = t;
+    $$('#screen-account .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+    $$('#screen-account .signup-only').forEach(el => el.classList.toggle('hidden', t !== 'signup'));
+    $('#acc-submit').textContent = t === 'signup' ? 'Create account' : 'Sign in';
+    $('#acc-pass').autocomplete = t === 'signup' ? 'new-password' : 'current-password';
+    $('#acc-status').textContent = '';
+  }
+  $$('#screen-account .tab').forEach(b => b.addEventListener('click', () => setAccTab(b.dataset.tab)));
+  $('#account-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const u = $('#acc-user').value, pw = $('#acc-pass').value;
+    if (accTab === 'signup' && pw !== $('#acc-pass2').value) { $('#acc-status').textContent = "The passwords don't match."; return; }
+    $('#acc-submit').disabled = true; $('#acc-status').textContent = accTab === 'signup' ? 'Making yer account…' : 'Signing in…';
+    try {
+      const me = accTab === 'signup' ? await Auth.signUp(u, pw, cloudData()) : await Auth.signIn(u, pw);
+      applyAccount(me);
+      $('#acc-pass').value = ''; $('#acc-pass2').value = '';
+      toast(`Welcome aboard, ${me.username}!${me.is_admin ? ' 👑' : ''}`);
+      go('menu');
+    } catch (err) { $('#acc-status').textContent = err.message; }
+    $('#acc-submit').disabled = false;
+  });
+  $('#acc-guest').addEventListener('click', () => { store.set('bnb.guestOk', true); go('menu'); });
+  onShow.account = () => { setAccTab(accTab); setTimeout(() => $('#acc-user').focus(), 50); };
+
+  /** Load a signed-in account's cloud save into the game. */
+  function applyAccount(me) {
+    if (!me) return;
+    profile.name = cleanName(me.username);
+    profile.coins = Math.max(0, me.coins | 0);
+    profile.inv = Object.fromEntries(ITEM_IDS.map(k => [k, Math.max(0, ((me.inv || {})[k]) | 0)]));
+    const d = me.data || {};
+    if (d.avatar) profile.avatar = Avatar.sanitize(d.avatar);
+    if (Array.isArray(d.kits)) customKits = d.kits.map(Dice.sanitize).filter(Boolean).map(k => ({ ...k, custom: true }));
+    if (d.kitId) profile.kitId = d.kitId;
+    profile.starterPurse = true;
+    store.set('bnb.kits', customKits);
+    store.set('bnb.profile', profile);
+    if (!d.avatar) Auth.save(cloudData());       // first sign-in on this account: store the pirate
+    renderMenuProfile(); renderAccountBar();
+  }
+  function renderAccountBar() {
+    const bar = $('#account-bar');
+    if (!Auth.enabled) bar.innerHTML = '';
+    else if (Auth.me) bar.innerHTML = `Signed in as <b>${esc(Auth.me.username)}</b>${Auth.isAdmin ? ' <span class="crown">👑 admin</span>' : ''} · <button class="linkish" id="acc-signout">Sign out</button>`;
+    else bar.innerHTML = `Playing as a guest · <button class="linkish" id="acc-open">Sign in / create account</button>`;
+    $('#admin-desk-btn').classList.toggle('hidden', !Auth.isAdmin);
+    $('#g-admin-btn').classList.toggle('hidden', !Auth.isAdmin);
+  }
+  $('#account-bar').addEventListener('click', async e => {
+    if (e.target.closest('#acc-open')) go('account');
+    if (e.target.closest('#acc-signout')) {
+      if (Online.role) leaveOnline();
+      await Auth.signOut();
+      store.set('bnb.guestOk', false);
+      profile.name = randomName(); profile.starterPurse = true; profile.coins = 5;
+      profile.inv = Object.fromEntries(ITEM_IDS.map(k => [k, 0]));
+      store.set('bnb.profile', profile);
+      renderMenuProfile(); renderAccountBar();
+      toast('Signed out — fair winds!');
+      go('account');
+    }
+  });
+
   // ---------- boot ----------
   window.addEventListener('avatar3d-ready', () => {
     renderMenuProfile();
@@ -1278,6 +1521,18 @@
   saveProfile();
   const room = new URLSearchParams(location.search).get('room');
   if (room) { go('online'); $('#join-code').value = room.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); setStatus('Ye have an invite — press Climb Aboard.'); }
+
+  // accounts: restore a saved sign-in, otherwise offer the sign-in screen (once; guests can carry on)
+  renderAccountBar();
+  if (Auth.enabled) {
+    Auth.restore().then(me => {
+      if (me && me.banned) {
+        Auth.signOut(); toast('This account has been banned.', 5000); renderAccountBar();
+        if (current === 'menu') go('account');
+      } else if (me) applyAccount(me);
+      else if (!store.get('bnb.guestOk', false) && current === 'menu') go('account');
+    }).catch(err => console.warn('account restore', err));
+  }
 
   // installable app + offline play
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

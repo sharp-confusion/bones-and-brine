@@ -18,6 +18,20 @@ A pirate tabletop game of liar's dice that runs in any browser.
 
 No build step and no game server. It's plain HTML/CSS/JS.
 
+## Accounts and the admin (Supabase, free)
+
+Sign-in with a username and password, cloud saves, and the admin are powered by a free [Supabase](https://supabase.com) project. Until it's connected the game runs in guest mode.
+
+1. Create a project at supabase.com (sign in with GitHub, click **New project**).
+2. **Authentication → Sign In / Providers → Email**: switch **Confirm email** OFF and save. Usernames are turned into placeholder addresses, so no emails are ever sent.
+3. **SQL Editor → New query**: paste all of `supabase/setup.sql` and click **Run**.
+4. **Project Settings → API**: copy the **Project URL** and the **anon public** key into `js/config.js`.
+5. In the game, **Create account** with the username and password you want for the admin. Then run this in the SQL Editor (with your username):
+   `update public.profiles set is_admin = true where username = 'your_admin_name';`
+   Sign out and back in. The 👑 Admin Desk and the in-game 👑 button appear.
+
+**Admin powers:** kick and ban players, X-ray (see every cup), rig your own dice, and give or take doubloons and goods on any account. All of them are checked by the Supabase server or by the host against the server, so other players can't fake being admin.
+
 ## Rebuilding the 3D characters
 
 The parts are modelled from code in `art/build_pirates.py`. To change them, edit the script and run:
