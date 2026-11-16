@@ -514,3 +514,82 @@ body.mobile .log-btn { width: 34px; height: 34px; }
 .tag.banned { background: var(--blood); color: #fff; }
 .opt-row.admin-pick .stepper span { background: linear-gradient(#f3d27a, #d9a93a); color: #3a2400; font-weight: 800; }
 .tray-item.admin-item { background: linear-gradient(#f3e0a8, #e2bf6a); }
+
+/* ---------- phones & tablets (iPhone / iPad) ---------- */
+html, body { max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+#screen-game.active { grid-template-columns: minmax(0, 1fr); }
+.g-top { gap: .3rem; position: relative; }
+.g-info { min-width: 0; overflow: hidden; }
+.g-info b, .g-info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-coins { flex: none; }
+.icon-btn { flex: none; }
+.wide-only { display: none; }
+@media (min-width: 700px) { .wide-only { display: inline-block; } }
+.game-menu { position: absolute; top: calc(100% + 4px); left: 6px; z-index: 30; display: flex; flex-direction: column; min-width: 200px;
+  background: #0b1a26f5; border: 1px solid #ffffff2a; border-radius: 12px; padding: 6px; box-shadow: 0 10px 30px #000a; }
+.game-menu button { background: none; border: 0; color: var(--text); text-align: left; padding: .7rem .8rem; border-radius: 8px; font-weight: 700; font-size: 1rem; }
+.game-menu button:hover, .game-menu button:active { background: #ffffff14; }
+.game-menu .danger-item { color: #ff8a8a; }
+/* grids that must be allowed to shrink below their content */
+.locker, .forge, .online { grid-template-columns: minmax(0, 320px) minmax(0, 1fr); }
+.locker-options { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.opt-row, .locker-options > *, .forge-left, .forge-right, .locker-preview, .seat-row, .sr-main { min-width: 0; }
+.stepper span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat-row select { width: 100%; min-width: 0; }
+@media (max-width: 800px) {
+  .locker, .forge, .online { grid-template-columns: minmax(0, 1fr); }
+  .locker-options { grid-template-columns: minmax(0, 1fr); }
+  .screen > .panel, .locker, .forge, .online { width: calc(100% - 20px); }
+  .panel { padding: .9rem .8rem; }
+  .scr-head { padding: .6rem .7rem; gap: .6rem; }
+  .scr-head h2 { font-size: 1.45rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seat-row { gap: .4rem; padding: .4rem; }
+  .seat-row .avatar-svg, .seat-row .avatar-img { width: 40px; height: 40px; }
+  .x-btn { width: 36px; height: 36px; }
+  .color-row { grid-template-columns: repeat(2, 1fr); }
+}
+/* iOS zooms into any input smaller than 16px — keep them at 16px on touch devices */
+body.mobile input, body.mobile select, body.mobile textarea { font-size: 16px !important; }
+/* guest button readable on the parchment card */
+.account-card .btn.ghost { color: var(--ink); border-color: #8a6a3a; }
+/* Admin Desk pop-up */
+.desk-sheet { width: min(620px, 100%); display: flex; flex-direction: column; gap: .6rem; }
+.desk-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.desk-head h2 { color: #4a1d5c; font-size: 1.6rem; }
+.desk-close { background: #0000001a; color: var(--ink); border-color: #0002; }
+.desk-find { display: flex; gap: .5rem; }
+.desk-find input { flex: 1; min-width: 0; background: #fffaf0; border: 2px solid #8a6a3a; border-radius: 8px; padding: .5em .7em; color: var(--ink); font-size: 1.05rem; }
+.desk-players { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.desk-players small { color: #6b4a28; font-weight: 700; margin-right: .2rem; }
+.adm-line .btn.small { min-width: 44px; }
+@media (max-width: 600px) {
+  .desk-overlay { align-items: flex-end; padding: 0; }
+  .desk-overlay .desk-sheet { width: 100%; max-height: 92dvh; border-radius: 18px 18px 0 0; padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .adm-line > span { min-width: 100%; }
+}
+/* trays never wider than the screen */
+.item-tray, .taunt-tray, .admin-tray { max-width: calc(100% - 12px); }
+/* touch controls on tablets: keep them a comfortable width instead of stretching across the iPad */
+body.mobile .g-controls { max-width: 680px; margin: 0 auto; }
+body.mobile .g-bottom { padding-left: max(.7rem, env(safe-area-inset-left)); padding-right: max(.7rem, env(safe-area-inset-right)); }
+@media (min-width: 700px) {
+  body.mobile .actions .btn { min-height: 60px; }
+  body.mobile .faces .die { max-width: 60px; }
+}
+/* no grey flash when tapping on iOS, no accidental text selection while playing */
+#screen-game { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.scr-head .btn { flex: none; }
+.scr-head h2 { min-width: 0; }
+/* touch tablets held sideways (iPad landscape): table on the left, hand + controls in a column on the right */
+@media (orientation: landscape) and (min-width: 900px) {
+  body.mobile #screen-game.active { grid-template-columns: minmax(0, 1fr) clamp(340px, 34vw, 430px); grid-template-rows: auto auto minmax(0, 1fr); }
+  body.mobile .g-top, body.mobile .g-timer { grid-column: 1 / -1; }
+  body.mobile .g-table-wrap { grid-row: 3; grid-column: 1; }
+  body.mobile .g-bottom { grid-row: 3; grid-column: 2; overflow-y: auto; justify-content: center; border-top: 0; border-left: 3px solid #120a04;
+    box-shadow: -6px 0 20px #0008; padding-bottom: max(.7rem, env(safe-area-inset-bottom)); }
+  body.mobile .g-hand { flex-wrap: wrap; }
+  body.mobile .bid-builder { flex-direction: column; }
+  body.mobile .actions { grid-template-columns: 1fr 1fr; }
+  body.mobile .actions #c-bid { grid-column: 1 / -1; }
+}
+.actions:has(#c-spot.hidden) #c-liar { grid-column: 1 / -1; }

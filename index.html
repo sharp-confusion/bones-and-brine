@@ -32,7 +32,7 @@
     <button class="profile-chip" id="menu-profile" data-go="locker" aria-label="Edit yer pirate"></button>
     <div class="account-bar" id="account-bar"></div>
     <nav class="menu-buttons">
-      <button class="btn big admin-btn hidden" id="admin-desk-btn" data-go="admin">👑 Admin Desk</button>
+      <button class="btn big admin-btn hidden" id="admin-desk-btn">👑 Admin Desk</button>
       <button class="btn big primary" data-go="local">⚓ Pass &amp; Play</button>
       <button class="btn big" data-go="online">🏴‍☠️ Online Voyage</button>
       <button class="btn big" data-go="locker">🎩 Captain's Locker</button>
@@ -84,17 +84,6 @@
 </section>
 
 <!-- ============ ADMIN DESK ============ -->
-<section id="screen-admin" class="screen">
-  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>👑 Admin Desk</h2></header>
-  <div class="panel setup admin-desk">
-    <div class="row">
-      <input id="adm-user" placeholder="Pirate's username" maxlength="16" spellcheck="false" autocapitalize="none">
-      <button class="btn primary" id="adm-find">Look up</button>
-    </div>
-    <div id="adm-result" class="adm-result"></div>
-    <p class="status" id="adm-status"></p>
-  </div>
-</section>
 
 <!-- ============ CAPTAIN'S LOCKER ============ -->
 <section id="screen-locker" class="screen">
@@ -234,15 +223,19 @@
 <!-- ============ GAME ============ -->
 <section id="screen-game" class="screen">
   <header class="g-top">
-    <button class="icon-btn" id="g-menu" title="Leave game" aria-label="Leave game">☰</button>
+    <button class="icon-btn" id="g-menu" title="Menu" aria-label="Game menu" aria-expanded="false">☰</button>
     <div class="g-info"><b id="g-round">Round 1</b><span id="g-total"></span></div>
     <span class="g-coins" id="g-coins" title="Yer doubloons">🪙 0</span>
     <button class="icon-btn admin-btn hidden" id="g-admin-btn" title="Admin powers" aria-label="Admin powers">👑</button>
     <button class="icon-btn" id="g-items-btn" title="Grub &amp; grog" aria-label="Use an item">🍺</button>
     <button class="icon-btn" id="g-taunt-btn" title="Taunt" aria-label="Taunt">🦜</button>
-    <button class="icon-btn" id="g-log-btn" title="Ship's log" aria-label="Ship's log">📜</button>
-    <button class="icon-btn" id="g-sound" title="Sound" aria-label="Toggle sound">🔊</button>
-    <button class="icon-btn mob-only" id="g-full" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+    <button class="icon-btn wide-only" id="g-log-btn" title="Ship's log" aria-label="Ship's log">📜</button>
+    <div class="game-menu hidden" id="game-menu" role="menu">
+      <button role="menuitem" id="gm-log">📜 Ship's log</button>
+      <button role="menuitem" id="g-sound">🔊 Sound on</button>
+      <button role="menuitem" id="g-full">⛶ Fullscreen</button>
+      <button role="menuitem" id="g-leave" class="danger-item">🚪 Leave game</button>
+    </div>
   </header>
   <div class="g-timer" id="g-timer"><i></i></div>
   <div class="g-table-wrap">
@@ -288,6 +281,20 @@
   <div class="overlay curtain hidden" id="curtain"><div class="sheet" id="curtain-body"></div></div>
   <div class="overlay hidden" id="reveal"><div class="sheet reveal-sheet" id="reveal-body"></div></div>
 </section>
+
+<!-- ============ ADMIN DESK (pop-up: from the menu or mid-game) ============ -->
+<div class="overlay desk-overlay hidden" id="desk-overlay" role="dialog" aria-modal="true" aria-label="Admin Desk">
+  <div class="sheet desk-sheet">
+    <div class="desk-head"><h2>👑 Admin Desk</h2><button class="icon-btn desk-close" id="desk-close" aria-label="Close">✕</button></div>
+    <div class="desk-players" id="desk-players"></div>
+    <form class="desk-find" id="desk-find" autocomplete="off">
+      <input id="adm-user" placeholder="Pirate's username" maxlength="16" spellcheck="false" autocapitalize="none" autocorrect="off" enterkeyhint="search">
+      <button class="btn primary" id="adm-find" type="submit">Look up</button>
+    </form>
+    <div id="adm-result" class="adm-result"></div>
+    <p class="status" id="adm-status"></p>
+  </div>
+</div>
 
 <div id="toasts" aria-live="polite"></div>
 

@@ -951,7 +951,7 @@
     const s = G.s; if (!s || current !== 'game') return;
     $('#g-round').textContent = `Round ${s.round}`;
     $('#g-total').textContent = `${Engine.totalDice(s)} dice · ${s.players.filter(p => !p.out).length} pirates afloat`;
-    $('#g-sound').textContent = Sfx.on ? '🔊' : '🔇';
+    $('#g-sound').textContent = Sfx.on ? '🔊 Sound on' : '🔇 Sound off';
     renderCoins(); renderSeats(); renderCenter(); renderHand(); renderControls(); renderLog(); renderReveal(); tick();
     G.rollAnim = false;
   }
@@ -1305,16 +1305,33 @@
     if (Online.role) leaveOnline();
     endGame(); go('menu');
   }
-  $('#g-menu').addEventListener('click', () => {
+  // ☰ game menu: log, sound, fullscreen and leaving (keeps the top bar short on phones)
+  const closeGameMenu = () => { $('#game-menu').classList.add('hidden'); $('#g-menu').setAttribute('aria-expanded', 'false'); };
+  $('#g-menu').addEventListener('click', e => {
+    e.stopPropagation();
+    $('#taunt-tray').classList.add('hidden'); $('#item-tray').classList.add('hidden'); $('#admin-tray').classList.add('hidden');
+    const open = $('#game-menu').classList.toggle('hidden') === false;
+    $('#g-menu').setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#game-menu, #g-menu')) closeGameMenu(); });
+  $('#g-leave').addEventListener('click', () => {
+    closeGameMenu();
     if (G.s && G.s.phase !== 'over' && !confirm('Abandon ship and return to port?')) return;
     quitGame();
   });
+  $('#gm-log').addEventListener('click', () => { closeGameMenu(); $('#g-log-btn').click(); });
   $('#g-sound').addEventListener('click', () => { Sfx.toggle(); render(); });
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const fsOK = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
   $('#g-full').addEventListener('click', () => {
-    try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen({ navigationUI: 'hide' }); }
-    catch (_) { toast('Fullscreen not supported here — try “Add to Home Screen”'); }
+    closeGameMenu();
+    const de = document.documentElement;
+    try {
+      if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else (de.requestFullscreen || de.webkitRequestFullscreen).call(de);
+    } catch (_) { toast('Fullscreen not supported here — use “Add to Home Screen” instead'); }
   });
-  if (!document.fullscreenEnabled) $('#g-full').style.display = 'none';
+  if (!fsOK) $('#g-full').style.display = 'none';      // iPhone Safari has no fullscreen; the home-screen app is fullscreen already
 
   // --- keyboard ---------------------------------------------------------------
   document.addEventListener('keydown', e => {
@@ -1371,6 +1388,7 @@
       .filter(o => o.i !== me && !o.p.bot && !(G.mode === 'client' && o.p.id === 'host'));   // the captain can't be kicked off their own ship
     $('#admin-tray').innerHTML = `
       <div class="tray-head">👑 Admin powers</div>
+      <button class="btn admin-btn" id="adm-open-desk">📒 Open Admin Desk</button>
       <label class="adm-row"><input type="checkbox" id="adm-xray" ${G.xray ? 'checked' : ''}> <span><b>X-ray</b> — see everyone's dice</span></label>
       <div class="adm-block"><b>Rig yer dice</b> <small>(tap a die to change it)</small>
         <div class="rig">${canRig ? G.rigDraft.map((d, k) => `<button data-rig="${k}">${Dice.render(d, mine.kit, 34)}</button>`).join('') : '<small>Only during wagering, while ye still have dice.</small>'}</div>
@@ -1378,6 +1396,7 @@
       </div>
       ${G.mode === 'local' ? '' : `<div class="adm-block"><b>Players</b>${others.length ? others.map(o => `
         <div class="adm-player"><span>${esc(o.p.name)} <small>${o.seat && o.seat.account ? '✔ account' : 'guest'}</small></span>
+          ${o.seat && o.seat.account ? `<button class="btn small" data-adesk="${esc(o.seat.account)}" title="Doubloons &amp; goods">🪙</button>` : ''}
           <button class="btn small" data-akick="${esc(o.p.id)}">Kick</button>
           ${o.seat && o.seat.account ? `<button class="btn small danger" data-aban="${esc(o.p.id)}">Ban</button>` : ''}</div>`).join('') : '<small>No other human pirates aboard.</small>'}</div>`}`;
   }
@@ -1392,6 +1411,8 @@
     render();
   });
   $('#admin-tray').addEventListener('click', async e => {
+    if (e.target.closest('#adm-open-desk')) { openDesk(); return; }
+    const dk = e.target.closest('[data-adesk]'); if (dk) { openDesk(dk.dataset.adesk); return; }
     const rig = e.target.closest('[data-rig]');
     if (rig) { const k = Number(rig.dataset.rig); G.rigDraft[k] = G.rigDraft[k] % 6 + 1; renderAdminTray(); return; }
     if (e.target.closest('#adm-rig-go')) {
@@ -1444,14 +1465,38 @@
       }
     } catch (err) { $('#adm-status').textContent = err.message; }
   }
-  $('#adm-find').addEventListener('click', async () => {
-    const u = $('#adm-user').value.trim();
+  async function deskLookup(u) {
+    u = String(u || '').trim();
     if (!u) return;
+    $('#adm-user').value = u;
     $('#adm-status').textContent = 'Searching…';
     try { const r = await Auth.admin.lookup(u); renderDesk(r); $('#adm-status').textContent = r ? '' : `No pirate called "${u}".`; }
     catch (err) { renderDesk(null); $('#adm-status').textContent = err.message; }
+  }
+  $('#desk-find').addEventListener('submit', e => { e.preventDefault(); $('#adm-user').blur(); deskLookup($('#adm-user').value); });
+  /** Open the Admin Desk pop-up (from the menu or in the middle of a game), optionally on one pirate. */
+  function openDesk(username) {
+    if (!Auth.isAdmin) return;
+    $('#admin-tray').classList.add('hidden');
+    // quick picks: the signed-in pirates at this table / in this lobby
+    const here = [];
+    if (G.s && G.mode !== 'local') G.s.players.forEach(p => { const st = Online.seats.find(x => x.id === p.id); if (st && st.account) here.push(st.account); });
+    else if (Online.role) Online.seats.forEach(st => { if (st.account) here.push(st.account); });
+    if (Auth.me && !here.includes(Auth.me.username)) here.unshift(Auth.me.username);
+    $('#desk-players').innerHTML = here.length ? `<small>At this table:</small>${[...new Set(here)].map(u => `<button class="chip-btn" data-dpick="${esc(u)}">${esc(u)}${Auth.me && u === Auth.me.username ? ' (you)' : ''}</button>`).join('')}` : '';
+    $('#adm-status').textContent = '';
+    $('#desk-overlay').classList.remove('hidden');
+    if (username) deskLookup(username);
+    else if (!deskUser) setTimeout(() => { if (!Device.touch) $('#adm-user').focus(); }, 60);
+  }
+  const closeDesk = () => $('#desk-overlay').classList.add('hidden');
+  $('#admin-desk-btn').addEventListener('click', () => openDesk());
+  $('#desk-close').addEventListener('click', closeDesk);
+  $('#desk-overlay').addEventListener('click', e => {
+    if (e.target.id === 'desk-overlay') closeDesk();                 // tap outside the sheet
+    const pk = e.target.closest('[data-dpick]'); if (pk) deskLookup(pk.dataset.dpick);
   });
-  $('#adm-user').addEventListener('keydown', e => { if (e.key === 'Enter') $('#adm-find').click(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#desk-overlay').classList.contains('hidden')) closeDesk(); });
   $('#adm-result').addEventListener('click', e => {
     if (!deskUser) return;
     const c = e.target.closest('[data-coins]'), it = e.target.closest('[data-item]'), b = e.target.closest('[data-ban]');
@@ -1465,7 +1510,6 @@
       deskRun(() => Auth.admin.setBan(deskUser.username, banIt), banIt ? 'Banned.' : 'Unbanned.');
     }
   });
-  onShow.admin = () => { if (!Auth.isAdmin) { go('menu'); return; } $('#adm-status').textContent = ''; };
 
   // --- sign in / create account ---
   let accTab = 'signin';
@@ -1510,7 +1554,7 @@
     store.set('bnb.kits', customKits);
     store.set('bnb.profile', profile);
     if (!d.avatar) Auth.save(cloudData());       // first sign-in on this account: store the pirate
-    renderMenuProfile(); renderAccountBar();
+    renderMenuProfile(); renderAccountBar(); renderCoins();
   }
   function renderAccountBar() {
     const bar = $('#account-bar');
