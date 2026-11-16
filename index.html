@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1a26">
+<meta name="description" content="Bones & Brine — a pirate tabletop game of liar's dice. Pass-and-play, bots and online matches.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Bones &amp; Brine — Pirate Liar's Dice</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Alegreya+SC:wght@700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="desktop">
+
+<!-- ============ MAIN MENU ============ -->
+<section id="screen-menu" class="screen active">
+  <div class="menu-wrap">
+    <h1 class="logo">Bones <span>&amp;</span> Brine</h1>
+    <p class="tagline">A pirate's game of liar's dice</p>
+    <button class="profile-chip" id="menu-profile" data-go="locker" aria-label="Edit yer pirate"></button>
+    <nav class="menu-buttons">
+      <button class="btn big primary" data-go="local">⚓ Pass &amp; Play</button>
+      <button class="btn big" data-go="online">🏴‍☠️ Online Voyage</button>
+      <button class="btn big" data-go="locker">🎩 Captain's Locker</button>
+      <button class="btn big" data-go="forge">🎲 Dice Forge</button>
+      <button class="btn big" data-go="shop">🍺 The Tavern (shop)</button>
+      <button class="btn big ghost" data-go="rules">📜 How to Play</button>
+    </nav>
+    <div class="menu-foot">
+      <label>Controls
+        <select id="controls-mode">
+          <option value="auto">Auto-detect</option>
+          <option value="desktop">Mouse &amp; keyboard</option>
+          <option value="mobile">Touch</option>
+        </select>
+      </label>
+      <span id="device-note"></span>
+    </div>
+  </div>
+  <div class="waves" aria-hidden="true"></div>
+</section>
+
+<!-- ============ CAPTAIN'S LOCKER ============ -->
+<section id="screen-locker" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>Captain's Locker</h2></header>
+  <div class="locker">
+    <div class="panel locker-preview">
+      <div id="locker-avatar" class="avatar-big"></div>
+      <span class="drag-hint">Drag yer pirate to spin them round</span>
+      <div class="name-row">
+        <input id="locker-name" maxlength="16" aria-label="Pirate name" autocomplete="off">
+        <button class="btn small" id="locker-randname" title="Random name">🎲</button>
+      </div>
+      <button class="btn" id="locker-random">Randomise Look</button>
+      <div class="equipped-kit">
+        <span>Yer dice</span>
+        <div id="locker-kit"></div>
+        <button class="btn small" data-go="forge">Change</button>
+      </div>
+    </div>
+    <div class="panel locker-options" id="locker-options"></div>
+  </div>
+</section>
+
+<!-- ============ DICE FORGE ============ -->
+<section id="screen-forge" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>Dice Forge</h2></header>
+  <div class="forge">
+    <div class="panel forge-left">
+      <h3>Dice Kits</h3>
+      <div class="kit-grid" id="kit-grid"></div>
+      <button class="btn" id="forge-new">+ New Blank Design</button>
+    </div>
+    <div class="panel forge-right">
+      <div class="forge-preview" id="forge-preview"></div>
+      <div class="forge-form">
+        <label class="field">Kit name <input id="f-name" maxlength="20" autocomplete="off"></label>
+        <div class="color-row">
+          <label>Face<input type="color" id="f-face"></label>
+          <label>Shade<input type="color" id="f-face2"></label>
+          <label>Pips<input type="color" id="f-pip"></label>
+          <label>Edge<input type="color" id="f-edge"></label>
+        </div>
+        <div class="opt-group"><span>Pip shape</span><div class="chips" id="f-pipShape"></div></div>
+        <div class="opt-group"><span>Wild “1” mark</span><div class="chips" id="f-wild"></div></div>
+        <div class="opt-group"><span>Pattern</span><div class="chips" id="f-pattern"></div></div>
+        <label class="field">Corners <input type="range" id="f-round" min="0" max="40"></label>
+      </div>
+      <div class="forge-actions">
+        <button id="f-equip" class="btn primary">Equip</button>
+        <button id="f-save" class="btn">Save as New</button>
+        <button id="f-update" class="btn">Save Changes</button>
+        <button id="f-delete" class="btn danger">Scrap</button>
+      </div>
+      <p class="hint" id="forge-hint"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TAVERN SHOP ============ -->
+<section id="screen-shop" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>The Tavern</h2></header>
+  <div class="panel shop">
+    <div class="shop-wallet">Yer purse: <b>🪙 <span id="shop-coins">0</span></b> doubloons</div>
+    <p class="hint">Earn 1 doubloon for every die ye make another pirate lose. Spend them here, then enjoy yer goods at the table with the 🍺 button — everyone sees ye indulge.</p>
+    <div class="shop-grid" id="shop-grid"></div>
+  </div>
+</section>
+
+<!-- ============ LOCAL SETUP ============ -->
+<section id="screen-local" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>Pass &amp; Play</h2></header>
+  <div class="panel setup">
+    <p class="hint">Up to 5 pirates share one device — pass it round the table. Fill empty seats with bots (max 6 seats).</p>
+    <div id="seat-list" class="seat-list"></div>
+    <div class="row">
+      <button id="add-human" class="btn">+ Add Pirate</button>
+      <button id="add-bot" class="btn">+ Add Bot</button>
+    </div>
+    <div class="rules-box" id="local-rules"></div>
+    <button id="local-start" class="btn big primary">Set Sail!</button>
+  </div>
+</section>
+
+<!-- ============ ONLINE ============ -->
+<section id="screen-online" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>Online Voyage</h2></header>
+  <div class="online">
+    <div class="panel online-card">
+      <h3>Captain a Ship</h3>
+      <p>Host a match and share the room code with yer crew.</p>
+      <button id="host-btn" class="btn big primary">Host a Match</button>
+    </div>
+    <div class="panel online-card">
+      <h3>Join a Crew</h3>
+      <p>Enter the code yer captain gave ye.</p>
+      <input id="join-code" placeholder="CODE" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button id="join-btn" class="btn big">Climb Aboard</button>
+    </div>
+    <p id="online-status" class="status"></p>
+  </div>
+</section>
+
+<!-- ============ LOBBY ============ -->
+<section id="screen-lobby" class="screen">
+  <header class="scr-head"><button class="btn small" id="lobby-leave">← Leave</button><h2>Ship's Lobby</h2></header>
+  <div class="panel setup">
+    <div class="room-code">
+      <span>Room code</span><b id="lobby-code">-----</b>
+      <button id="copy-link" class="btn small">Share invite</button>
+    </div>
+    <div id="lobby-seats" class="seat-list"></div>
+    <div id="lobby-host-ctrls" class="row"><button id="lobby-add-bot" class="btn">+ Add Bot</button></div>
+    <div id="lobby-rules" class="rules-box"></div>
+    <button id="lobby-start" class="btn big primary">Set Sail!</button>
+    <p id="lobby-wait" class="status">Waiting for the captain to set sail…</p>
+  </div>
+</section>
+
+<!-- ============ RULES ============ -->
+<section id="screen-rules" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>How to Play</h2></header>
+  <article class="panel rules">
+    <p><b>Every pirate</b> starts with five dice hidden under their cup. Everyone rolls in secret and only looks at their own dice.</p>
+    <h3>Wagering</h3>
+    <p>On yer turn, wager how many dice of one face ye reckon are on the <i>whole table</i> — e.g. “four 5s”. Each wager must beat the last: a higher count, or the same count of a higher face.</p>
+    <p><b>Wild 1s</b> (optional): 1s count as every face. Wagering on 1s needs only half the count (rounded up); switching back off 1s needs double plus one.</p>
+    <h3>Calling</h3>
+    <p><b>Liar!</b> — ye doubt the last wager. All dice are revealed. If there are fewer than wagered, the wagerer loses a die; otherwise the caller does.</p>
+    <p><b>Spot On!</b> (optional) — ye claim the count is <i>exactly</i> right. Be right and ye win back a lost die; be wrong and ye lose one.</p>
+    <p>Lose all yer dice and ye walk the plank. The last pirate with dice claims the treasure.</p>
+    <h3>Controls</h3>
+    <p><b>Keyboard:</b> ←/→ or 1–6 pick a face, ↑/↓ change the count, <kbd>Enter</kbd> wager, <kbd>L</kbd> Liar, <kbd>S</kbd> Spot On.<br>
+    <b>Touch:</b> big buttons appear automatically on phones and tablets. The 🦜 parrot whispers the odds of a wager based on yer own dice.</p>
+  </article>
+</section>
+
+<!-- ============ GAME ============ -->
+<section id="screen-game" class="screen">
+  <header class="g-top">
+    <button class="icon-btn" id="g-menu" title="Leave game" aria-label="Leave game">☰</button>
+    <div class="g-info"><b id="g-round">Round 1</b><span id="g-total"></span></div>
+    <span class="g-coins" id="g-coins" title="Yer doubloons">🪙 0</span>
+    <button class="icon-btn" id="g-items-btn" title="Grub &amp; grog" aria-label="Use an item">🍺</button>
+    <button class="icon-btn" id="g-taunt-btn" title="Taunt" aria-label="Taunt">🦜</button>
+    <button class="icon-btn" id="g-log-btn" title="Ship's log" aria-label="Ship's log">📜</button>
+    <button class="icon-btn" id="g-sound" title="Sound" aria-label="Toggle sound">🔊</button>
+    <button class="icon-btn mob-only" id="g-full" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+  </header>
+  <div class="g-timer" id="g-timer"><i></i></div>
+  <div class="g-table-wrap">
+    <div class="g-table" id="g-table">
+      <div class="felt"></div>
+      <div class="g-center" id="g-center"></div>
+    </div>
+    <div class="g-log" id="g-log">
+      <div class="log-head" id="log-head" title="Drag to move">
+        <span class="log-title">📜 Ship's Log</span>
+        <button class="log-btn" id="log-min" title="Minimise" aria-label="Minimise log">–</button>
+        <button class="log-btn" id="log-close" title="Hide" aria-label="Hide log">✕</button>
+      </div>
+      <div class="log-body" id="log-body"></div>
+    </div>
+    <div class="taunt-tray hidden" id="taunt-tray"></div>
+    <div class="item-tray hidden" id="item-tray"></div>
+  </div>
+  <div class="g-bottom">
+    <div class="g-hand" id="g-hand"></div>
+    <div class="g-controls hidden" id="g-controls">
+      <div class="bid-builder">
+        <div class="qty">
+          <button class="btn round" id="c-minus" aria-label="Fewer">−</button>
+          <span id="c-qty">1</span>
+          <button class="btn round" id="c-plus" aria-label="More">+</button>
+        </div>
+        <span class="times">×</span>
+        <div class="faces" id="c-faces"></div>
+      </div>
+      <div class="actions">
+        <button id="c-bid" class="btn primary">Wager</button>
+        <button id="c-liar" class="btn danger">Liar!</button>
+        <button id="c-spot" class="btn gold">Spot On</button>
+      </div>
+      <div class="c-odds" id="c-odds"></div>
+      <div class="kbd-hint">←/→ face · ↑/↓ count · Enter wager · L liar · S spot on</div>
+    </div>
+    <div class="g-wait hidden" id="g-wait"></div>
+  </div>
+
+  <div class="overlay curtain hidden" id="curtain"><div class="sheet" id="curtain-body"></div></div>
+  <div class="overlay hidden" id="reveal"><div class="sheet reveal-sheet" id="reveal-body"></div></div>
+</section>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/bot.js"></script>
+<script src="js/dice.js"></script>
+<script src="js/avatar.js"></script>
+<script src="js/net.js"></script>
+<script src="js/app.js"></script>
+<script src="models/pirates.js"></script>
+<script src="js/avatar3d.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "Bones & Brine — Pirate Liar's Dice",
+  "short_name": "Bones & Brine",
+  "description": "A pirate tabletop game of liar's dice. Pass-and-play, bots and online matches.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1a26",
+  "theme_color": "#0b1a26",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
