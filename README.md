@@ -30,6 +30,14 @@ Sign-in with a username and password, cloud saves, and the admin are powered by 
    `update public.profiles set is_admin = true where username = 'your_admin_name';`
    Sign out and back in. The 👑 Admin Desk and the in-game 👑 button appear.
 
+6. Run `supabase/02_chat_and_reports.sql` in the SQL Editor too. It adds chat timeouts, reports and the admin inbox.
+
+**Quick Game, chat and moderation:**
+- **⚡ Quick Game** puts you in a queue (Supabase Realtime). With 4 players, or 2+ who've waited a few seconds, the longest-waiting player hosts and the rest join automatically. Empty seats get bots. After 20 s alone you can play with bots instead.
+- **Chat** in online lobbies and at the table (💬). Guests can read it; signed-in players can talk. Messages are filtered for English and German swearing and slurs, including leetspeak, stretched letters and spaced-out words.
+- **Timeouts** are kept on the server: 1st strike 30 s, 2nd 5 min, 3rd 15 min, then 24 h. From the 5th strike the admin gets a case with every censored message.
+- **⚑ Report** a player from the lobby, the ☰ menu or next to a chat message. Their recent chat is attached. Reports and chat cases appear in the Admin Desk under **📥 Reports**, where the admin can look the player up, ban them, mark the report reviewed, or dismiss it.
+
 **Admin powers:** kick and ban players, X-ray (see every cup), rig your own dice, and give or take doubloons and goods on any account. All of them are checked by the Supabase server or by the host against the server, so other players can't fake being admin.
 
 ## Rebuilding the 3D characters

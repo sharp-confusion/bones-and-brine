@@ -115,11 +115,25 @@ const Auth = (() => {
     lookup: u => rpc('admin_lookup', { p_username: cleanUser(u) }).then(r => (Array.isArray(r) ? r[0] : r) || null),
     addCoins: (u, d) => rpc('admin_add_coins', { p_username: cleanUser(u), p_delta: d | 0 }),
     giveItem: (u, item, q) => rpc('admin_give_item', { p_username: cleanUser(u), p_item: item, p_qty: q | 0 }),
-    setBan: (u, b) => rpc('admin_set_ban', { p_username: cleanUser(u), p_banned: !!b })
+    setBan: (u, b) => rpc('admin_set_ban', { p_username: cleanUser(u), p_banned: !!b }),
+    reports: (status = 'open') => rpc('admin_reports', { p_status: status }),
+    reportCount: () => rpc('admin_report_count', {}),
+    resolve: (id, status) => rpc('admin_resolve_report', { p_id: id, p_status: status }),
+    chatRecord: u => rpc('admin_chat_record', { p_username: cleanUser(u) }),
+    clearStrikes: u => rpc('admin_clear_strikes', { p_username: cleanUser(u) })
   };
 
+  // --- chat moderation & reports (all checked on the server) ---
+  /** Tell the server my message was censored; returns { strikes, muted_until }. */
+  const recordStrike = (original, censored) => rpc('record_chat_strike', { p_original: String(original).slice(0, 300), p_censored: String(censored).slice(0, 300) });
+  /** Timeout status for a player (default: me). */
+  const chatStatus = userId => rpc('chat_status', { p_user: userId || null });
+  const submitReport = (reported, reason, details, evidence) =>
+    rpc('submit_report', { p_reported: String(reported).slice(0, 40), p_reason: reason, p_details: String(details || '').slice(0, 600), p_evidence: evidence || [] });
+
   return {
-    enabled, restore, signIn, signUp, signOut, save, flush, token, verify, admin,
+    enabled, restore, signIn, signUp, signOut, save, flush, token, verify, admin, recordStrike, chatStatus, submitReport,
+    get client() { return sb; },
     get me() { return me; },
     get isAdmin() { return !!(me && me.is_admin); },
     USER_RE

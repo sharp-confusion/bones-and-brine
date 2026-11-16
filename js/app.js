@@ -296,7 +296,13 @@
         <b>${esc(it.name)}</b>
         <small>${it.qty > 1 ? `${it.qty} uses · ` : ''}ye own ${profile.inv[it.id]}</small>
         <button class="btn primary" data-buy="${it.id}" ${profile.coins < it.price ? 'disabled' : ''}>Buy · 🪙 ${it.price}</button>
-      </div>`).join('');
+      </div>`).join('') + (Auth.isAdmin ? SHOP.filter(it => it.adminOnly).map(it => `
+      <div class="shop-card admin-item">
+        ${itemIcon(it, 96)}
+        <b>👑 ${esc(it.name)}</b>
+        <small>Yours, admin · free · never runs out</small>
+        <span class="owned-note">Light it at the table: 🍺 → Light</span>
+      </div>`).join('') : '');
   }
   onShow.shop = renderShop;
   $('#shop-grid').addEventListener('click', e => {
@@ -400,7 +406,10 @@
     r = r || {};
     return { onesWild: !!r.onesWild, spotOn: !!r.spotOn, startDice: Math.max(3, Math.min(6, Number(r.startDice) || 5)), pace: PACE[r.pace] ? r.pace : 'relaxed' };
   }
-  function leaveOnline() { Net.close(); Online.role = null; Online.seats = []; Online.started = false; Online.code = ''; }
+  function leaveOnline() {
+    Net.close(); Online.role = null; Online.seats = []; Online.started = false; Online.code = ''; Online.quick = null;
+    if (typeof resetChat === 'function') resetChat();
+  }
 
   $('#host-btn').addEventListener('click', () => {
     setStatus('Hoisting the flag…'); $('#host-btn').disabled = true;
@@ -444,7 +453,7 @@
           ${x.bot ? (host ? personaSelect(x.bot.persona, `data-lpersona="${i}"`) : `<span class="tag bot">${esc(Bot.PERSONAS[x.bot.persona].label)}</span>`)
             : `<span class="tag ${isMe ? 'you' : ''}">${x.id === 'host' ? 'Captain' : 'Crew'}${isMe ? ' · You' : ''}${x.admin ? ' · 👑 Admin' : x.account ? ' · ✔ Account' : ' · Guest'}</span>`}
         </div>
-        <span class="sr-btns">${Dice.render(6, x.kit, 32)}${(host ? x.id !== myId : (Auth.isAdmin && x.id !== 'host' && x.id !== Online.myId)) ? `<button class="x-btn" data-kick="${esc(x.id)}" title="${x.bot ? 'Remove bot' : 'Make them walk the plank'}">✕</button>` : ''}</span>
+        <span class="sr-btns">${Dice.render(6, x.kit, 32)}${!x.bot && x.id !== (host ? 'host' : Online.myId) ? `<button class="x-btn" data-lrep="${esc(x.id)}" title="Report this pirate" aria-label="Report">⚑</button>` : ''}${(host ? x.id !== myId : (Auth.isAdmin && x.id !== 'host' && x.id !== Online.myId)) ? `<button class="x-btn" data-kick="${esc(x.id)}" title="${x.bot ? 'Remove bot' : 'Make them walk the plank'}">✕</button>` : ''}</span>
       </div>`;
     }).join('') + (Online.seats.length < MAX_SEATS ? `<p class="hint">${MAX_SEATS - Online.seats.length} seat(s) free — share the code, or add bots.</p>` : '');
     $('#lobby-host-ctrls').classList.toggle('hidden', !host);
@@ -452,6 +461,7 @@
     $('#lobby-start').classList.toggle('hidden', !host);
     $('#lobby-start').disabled = Online.seats.length < 2;
     $('#lobby-wait').classList.toggle('hidden', host);
+    renderChat();
     $('#lobby-rules').innerHTML = rulesHTML(Online.rules, host);
   }
   onShow.lobby = renderLobby;
@@ -514,7 +524,7 @@
       let v = null;
       try { v = await Auth.verify(String(msg.token)); } catch (_) {}
       if (v && v.banned) { Net.sendTo(id, { t: 'error', msg: 'This account has been banned from Bones & Brine.' }); setTimeout(() => Net.drop(id), 400); return; }
-      if (v) { prof.name = cleanName(v.username); prof.account = v.username; prof.admin = !!v.is_admin; }
+      if (v) { prof.name = cleanName(v.username); prof.account = v.username; prof.admin = !!v.is_admin; prof.uid = v.id; }
     }
     if (!prof.admin) prof.avatar = Avatar.stripAdmin(prof.avatar);   // 👑 looks are for the verified admin only
     if (Online.started) return;
@@ -528,9 +538,11 @@
       }
       Net.sendTo(id, { t: 'welcome', id });
       hostLobbyBroadcast();
+      if (Online.quick) quickCheckStart();
   }
   function hostHandle(id, msg) {
     if (msg.t === 'join') { hostJoin(id, msg); return; }
+    if (msg.t === 'chat') { hostChat(id, String(msg.text || '')); return; }
     if (msg.t === 'admin') {
       const seat = Online.seats.find(x => x.id === id);
       if (seat && seat.admin) adminCommand(id, msg);   // only server-verified admins
@@ -560,6 +572,7 @@
         break;
       case 'state': if (msg.s) { G.xrayFeed = !!msg.xray; receive(msg.s, Number(msg.you) | 0, Number(msg.turnLeft) || 0); } break;
       case 'taunt': showTaunt(Number(msg.seat) | 0, Number(msg.i) | 0); break;
+      case 'chat': addChat(msg); break;
       case 'use': if (shopItem(msg.id)) showUse(Number(msg.seat) | 0, msg.id); break;
       case 'error': toast(String(msg.msg || 'Something went wrong').slice(0, 120), 4000); endGame(); leaveOnline(); go('online'); break;
     }
@@ -952,6 +965,8 @@
     $('#g-round').textContent = `Round ${s.round}`;
     $('#g-total').textContent = `${Engine.totalDice(s)} dice · ${s.players.filter(p => !p.out).length} pirates afloat`;
     $('#g-sound').textContent = Sfx.on ? '🔊 Sound on' : '🔇 Sound off';
+    $$('.online-only').forEach(el => el.classList.toggle('hidden', G.mode === 'local'));
+    $('#g-admin-btn').classList.toggle('hidden', !Auth.isAdmin);
     renderCoins(); renderSeats(); renderCenter(); renderHand(); renderControls(); renderLog(); renderReveal(); tick();
     G.rollAnim = false;
   }
@@ -975,7 +990,9 @@
       el.style.left = x + '%'; el.style.top = y + '%';
       let bubble = '';
       const t = G.taunts[i];
+      const cb = (G.chatBubbles || {})[i];
       if (t && t.until > now) bubble = `<div class="s-bubble taunt">${esc(TAUNTS[t.i])}</div>`;
+      else if (cb && cb.until > now) bubble = `<div class="s-bubble taunt chat-bubble">💬 ${esc(cb.text.length > 40 ? cb.text.slice(0, 38) + '…' : cb.text)}</div>`;
       else if (isTurn) {
         const think = p.bot ? `<span class="dots"><i></i><i></i><i></i></span> <span class="tl">${esc(thinkLine(i))}</span>` : '<span class="dots"><i></i><i></i><i></i></span>';
         bubble = `<div class="s-bubble think">${i === cs ? 'Yer wager!' : think}</div>`;
@@ -1367,6 +1384,22 @@
     if (msg.cmd === 'kick' && msg.id && msg.id !== fromId) hostKick(String(msg.id), 'An admin threw ye off the ship.');
     else if (msg.cmd === 'xray' && seat) { seat.xray = !!msg.on; if (G.s && G.mode === 'host') broadcastState(); }
     else if (msg.cmd === 'setDice' && G.s && G.mode === 'host') rigDice(G.s.players.findIndex(p => p.id === fromId), msg.dice);
+    else if (msg.cmd === 'setCount' && G.s && G.mode === 'host') setDiceCount(G.s.players.findIndex(p => p.id === fromId), Number(msg.n) | 0);
+  }
+  /** Admin: change how many dice a seat has (1–10). Mid-round the cup gains or loses dice at once. */
+  function setDiceCount(i, n) {
+    const s = G.s, p = s && s.players[i];
+    if (!p) return false;
+    n = Math.max(1, Math.min(10, n | 0));
+    p.count = n; p.out = false;
+    if (s.phase === 'bidding') {
+      while (p.dice.length < n) p.dice.push(1 + Math.floor(Math.random() * 6));
+      if (p.dice.length > n) p.dice.length = n;
+      p.dice.sort((a, b) => a - b);
+    }
+    if (G.mode === 'host') broadcastState();
+    render();
+    return true;
   }
   /** Replace a seat's dice for this round (admin only). */
   function rigDice(i, dice) {
@@ -1394,6 +1427,9 @@
         <div class="rig">${canRig ? G.rigDraft.map((d, k) => `<button data-rig="${k}">${Dice.render(d, mine.kit, 34)}</button>`).join('') : '<small>Only during wagering, while ye still have dice.</small>'}</div>
         ${canRig ? '<button class="btn small primary" id="adm-rig-go">Use these dice</button>' : ''}
       </div>
+      ${mine ? `<div class="adm-block"><b>Number of dice</b> <small>(1–10, changes yer cup right away)</small>
+        <div class="adm-count"><button class="btn small" data-acount="-1" aria-label="Fewer dice">−</button><b>${mine.count}</b><button class="btn small" data-acount="1" aria-label="More dice">+</button></div>
+      </div>` : ''}
       ${G.mode === 'local' ? '' : `<div class="adm-block"><b>Players</b>${others.length ? others.map(o => `
         <div class="adm-player"><span>${esc(o.p.name)} <small>${o.seat && o.seat.account ? '✔ account' : 'guest'}</small></span>
           ${o.seat && o.seat.account ? `<button class="btn small" data-adesk="${esc(o.seat.account)}" title="Doubloons &amp; goods">🪙</button>` : ''}
@@ -1412,6 +1448,15 @@
   });
   $('#admin-tray').addEventListener('click', async e => {
     if (e.target.closest('#adm-open-desk')) { openDesk(); return; }
+    const cnt = e.target.closest('[data-acount]');
+    if (cnt) {
+      const mine = G.s && G.s.players[mySeatIdx()]; if (!mine) return;
+      const n = Math.max(1, Math.min(10, mine.count + Number(cnt.dataset.acount)));
+      if (G.mode === 'client') Net.send({ t: 'admin', cmd: 'setCount', n });
+      else setDiceCount(mySeatIdx(), n);
+      setTimeout(() => { G.rigDraft = null; renderAdminTray(); }, G.mode === 'client' ? 400 : 0);
+      return;
+    }
     const dk = e.target.closest('[data-adesk]'); if (dk) { openDesk(dk.dataset.adesk); return; }
     const rig = e.target.closest('[data-rig]');
     if (rig) { const k = Number(rig.dataset.rig); G.rigDraft[k] = G.rigDraft[k] % 6 + 1; renderAdminTray(); return; }
@@ -1555,6 +1600,8 @@
     store.set('bnb.profile', profile);
     if (!d.avatar) Auth.save(cloudData());       // first sign-in on this account: store the pirate
     renderMenuProfile(); renderAccountBar(); renderCoins();
+    refreshMyChatStatus();
+    if (me.is_admin) refreshReportCount();
   }
   function renderAccountBar() {
     const bar = $('#account-bar');
@@ -1577,6 +1624,311 @@
       toast('Signed out — fair winds!');
       go('account');
     }
+  });
+
+  // =====================================================================
+  //  CHAT (online lobbies and tables) with server-side timeouts
+  // =====================================================================
+  const ChatUI = { msgs: [], unread: 0, mutedUntil: 0, strikes: 0, last: 0 };
+  const fmtLeft = ms => { const s = Math.ceil(ms / 1000); if (s >= 3600) return Math.ceil(s / 3600) + ' h'; if (s >= 60) return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); return s + ' s'; };
+  const fmtSpan = ms => ms >= 3600000 ? Math.round(ms / 3600000) + ' hours' : ms >= 60000 ? Math.round(ms / 60000) + ' minutes' : Math.round(ms / 1000) + ' seconds';
+  function resetChat() { ChatUI.msgs = []; ChatUI.unread = 0; renderChat(); }
+  async function refreshMyChatStatus() {
+    if (!Auth.me) return;
+    try { const st = await Auth.chatStatus(); ChatUI.mutedUntil = st.muted_until ? Date.parse(st.muted_until) : 0; ChatUI.strikes = st.strikes | 0; } catch (_) {}
+    renderChatNote();
+  }
+  async function sendChat(raw) {
+    raw = String(raw || '').trim();
+    if (!raw || !Online.role) return false;
+    if (!Auth.me) { toast('Sign in to chat — it keeps the seas clean'); return false; }
+    if (Date.now() < ChatUI.mutedUntil) { toast(`🔇 Ye be timed out from chat for ${fmtLeft(ChatUI.mutedUntil - Date.now())}`); return false; }
+    if (Date.now() - ChatUI.last < 1200) { toast('Easy there — one message at a time'); return false; }
+    ChatUI.last = Date.now();
+    const c = Chat.censor(raw);
+    if (c.flagged) {
+      try {
+        const r = await Auth.recordStrike(raw, c.text);
+        ChatUI.strikes = r.strikes | 0;
+        ChatUI.mutedUntil = r.muted_until ? Date.parse(r.muted_until) : Date.now() + 30000;
+        toast(`🤬 Watch yer tongue! Strike ${ChatUI.strikes}: chat timeout for ${fmtSpan(ChatUI.mutedUntil - Date.now())}.`, 6000);
+        if (ChatUI.strikes >= 5) setTimeout(() => toast('Yer censored messages have been sent to the admin for review.', 6000), 1200);
+      } catch (err) { ChatUI.mutedUntil = Date.now() + 30000; }
+    }
+    if (Online.role === 'client') Net.send({ t: 'chat', text: c.text });
+    else hostChat('host', c.text);
+    renderChatNote();
+    return true;
+  }
+  /** Host: check, clean and pass on a chat message to everyone at the table. */
+  async function hostChat(fromId, text) {
+    const seat = Online.seats.find(x => x.id === fromId); if (!seat || !text.trim()) return;
+    const now = Date.now();
+    if (fromId !== 'host') {
+      if (!seat.account) return;                                   // guests can read but not talk
+      if (now - (seat.lastChat || 0) < 1000) return;              // flood guard
+      seat.lastChat = now;
+      if (!seat.chatCheckAt || now - seat.chatCheckAt > 15000) {   // timeouts are kept on the server
+        try { const st = await Auth.chatStatus(seat.uid); seat.mutedUntil = st.muted_until ? Date.parse(st.muted_until) : 0; } catch (_) {}
+        seat.chatCheckAt = now;
+      }
+      if (seat.mutedUntil > now) return;
+    }
+    const clean = Chat.censor(text.slice(0, 200));                 // censored again here, whatever the sender's game did
+    if (clean.flagged) seat.chatCheckAt = 0;                       // re-check their timeout on the next message
+    const msg = { t: 'chat', id: fromId, from: seat.name, account: seat.account || null, admin: !!seat.admin, text: clean.text, ts: now };
+    Net.broadcast(msg);
+    addChat(msg);
+  }
+  function addChat(m) {
+    const msg = { id: String(m.id || ''), from: cleanName(m.from), account: m.account ? String(m.account).slice(0, 16) : null, admin: !!m.admin,
+      text: Chat.censor(String(m.text || '')).text, ts: Number(m.ts) || Date.now() };
+    ChatUI.msgs.push(msg); if (ChatUI.msgs.length > 120) ChatUI.msgs.shift();
+    const mine = msg.id === (Online.role === 'host' ? 'host' : Online.myId);
+    if (!mine && current === 'game' && $('#game-chat').classList.contains('hidden')) ChatUI.unread++;
+    if (!mine && current === 'game' || mine) Sfx.click();
+    if (G.s && current === 'game') {                                // speech bubble over the speaker's seat
+      const i = G.s.players.findIndex(p => p.id === msg.id);
+      if (i >= 0) { G.chatBubbles = G.chatBubbles || {}; G.chatBubbles[i] = { text: msg.text, until: Date.now() + 4500 }; renderSeats(); setTimeout(() => { if (G.s) renderSeats(); }, 4600); }
+    }
+    renderChat();
+  }
+  function renderChat() {
+    const myId = Online.role === 'host' ? 'host' : Online.myId;
+    const html = ChatUI.msgs.length ? ChatUI.msgs.map(m => {
+      const mine = m.id === myId;
+      return `<p class="cl${mine ? ' mine' : ''}${m.admin ? ' adm' : ''}"><b>${m.admin ? '👑 ' : ''}${mine ? 'You' : esc(m.from)}</b> ${esc(m.text)}${!mine ? `<button class="cl-rep" type="button" data-rep="${esc(m.id)}" title="Report">⚑</button>` : ''}</p>`;
+    }).join('') : '<p class="cl-empty">No messages yet. Say ahoy!</p>';
+    $$('[data-chat] .chat-log').forEach(log => {
+      const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+      log.innerHTML = html;
+      if (atBottom) log.scrollTop = log.scrollHeight;
+    });
+    $('#g-chat-badge').classList.toggle('hidden', !ChatUI.unread);
+    $('#g-chat-badge').textContent = ChatUI.unread > 9 ? '9+' : ChatUI.unread || '';
+    renderChatNote();
+  }
+  function renderChatNote() {
+    const muted = Date.now() < ChatUI.mutedUntil;
+    $$('[data-chat]').forEach(box => {
+      const input = box.querySelector('.chat-input'), btn = box.querySelector('.chat-form button'), note = box.querySelector('.chat-note');
+      const can = !!Auth.me && !muted;
+      input.disabled = !can; btn.disabled = !can;
+      input.placeholder = !Auth.me ? 'Sign in to chat' : muted ? 'Timed out…' : 'Say something, matey…';
+      note.textContent = !Auth.me ? 'Guests can read the chat — sign in to talk.' : muted ? `🔇 Timed out for bad language: ${fmtLeft(ChatUI.mutedUntil - Date.now())} left (strike ${ChatUI.strikes})` : '';
+      note.classList.toggle('warn', muted);
+    });
+  }
+  $$('[data-chat] .chat-form').forEach(f => f.addEventListener('submit', async e => {
+    e.preventDefault();
+    const input = f.querySelector('.chat-input');
+    if (await sendChat(input.value)) input.value = '';
+  }));
+  $$('[data-chat] .chat-log').forEach(log => log.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep]'); if (b) openReport(b.dataset.rep);
+  }));
+  $('#g-chat-btn').addEventListener('click', () => {
+    $('#taunt-tray').classList.add('hidden'); $('#item-tray').classList.add('hidden'); $('#admin-tray').classList.add('hidden');
+    const box = $('#game-chat'); box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) { ChatUI.unread = 0; renderChat(); const log = box.querySelector('.chat-log'); log.scrollTop = log.scrollHeight; if (!Device.touch) box.querySelector('.chat-input').focus(); }
+  });
+  $('#game-chat-close').addEventListener('click', () => $('#game-chat').classList.add('hidden'));
+  setInterval(() => { if (ChatUI.mutedUntil && Online.role) renderChatNote(); }, 1000);
+
+  // =====================================================================
+  //  REPORTS
+  // =====================================================================
+  let reportTarget = null;
+  function reportCandidates() {
+    const myId = Online.role === 'host' ? 'host' : Online.myId;
+    return Online.seats.filter(x => !x.bot && x.id !== myId).map(x => ({ id: x.id, name: x.name, account: x.account }));
+  }
+  function openReport(id) {
+    if (!Auth.me) { toast('Sign in to report a player'); return; }
+    const list = reportCandidates();
+    if (!list.length) { toast('No other pirates here to report'); return; }
+    $('#rep-who').innerHTML = list.map(x => `<option value="${esc(x.id)}" ${x.id === id ? 'selected' : ''}>${esc(x.name)}${x.account ? '' : ' (guest)'}</option>`).join('');
+    $('#rep-details').value = ''; $('#rep-status').textContent = '';
+    updateEvidenceNote();
+    $('#report-overlay').classList.remove('hidden');
+    $('#game-menu').classList.add('hidden');
+  }
+  function evidenceFor(id) {
+    return ChatUI.msgs.filter(m => m.id === id).slice(-30).map(m => ({ at: new Date(m.ts).toISOString(), said: m.text }));
+  }
+  function updateEvidenceNote() {
+    const n = evidenceFor($('#rep-who').value).length;
+    $('#rep-evidence-note').textContent = n ? `Their last ${n} chat message${n > 1 ? 's' : ''} will be attached for the admin.` : 'No chat messages from them to attach.';
+  }
+  $('#rep-who').addEventListener('change', updateEvidenceNote);
+  $('#report-close').addEventListener('click', () => $('#report-overlay').classList.add('hidden'));
+  $('#report-overlay').addEventListener('click', e => { if (e.target.id === 'report-overlay') $('#report-overlay').classList.add('hidden'); });
+  $('#report-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const target = reportCandidates().find(x => x.id === $('#rep-who').value); if (!target) return;
+    $('#rep-send').disabled = true; $('#rep-status').textContent = 'Sending…';
+    try {
+      await Auth.submitReport(target.account || target.name, $('#rep-reason').value,
+        ($('#rep-details').value || '') + (target.account ? '' : ' [reported player was a guest]'), evidenceFor(target.id));
+      $('#report-overlay').classList.add('hidden');
+      toast(`⚑ Report sent. The admin will review what ${target.name} did. Thank ye!`, 5000);
+    } catch (err) { $('#rep-status').textContent = err.message; }
+    $('#rep-send').disabled = false;
+  });
+  $('#gm-report').addEventListener('click', () => openReport(null));
+  $('#lobby-seats').addEventListener('click', e => { const b = e.target.closest('[data-lrep]'); if (b) openReport(b.dataset.lrep); });
+
+  // --- Admin Desk: Reports tab ---
+  function setDeskTab(t) {
+    $$('.desk-tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.dtab === t));
+    $('#desk-pane-reports').hidden = t !== 'reports';
+    $('#desk-pane-pirates').hidden = t !== 'pirates';
+    if (t === 'reports') loadReports();
+  }
+  $$('.desk-tabs .tab').forEach(b => b.addEventListener('click', () => setDeskTab(b.dataset.dtab)));
+  $('#rep-filter').addEventListener('change', loadReports);
+  $('#rep-refresh').addEventListener('click', loadReports);
+  async function loadReports() {
+    $('#rep-list').innerHTML = '<p class="hint">Loading…</p>';
+    try {
+      const rows = await Auth.admin.reports($('#rep-filter').value);
+      $('#rep-list').innerHTML = rows.length ? rows.map(r => `
+        <div class="rep-card ${r.kind === 'chat_auto' ? 'auto' : ''}" data-rid="${r.id}">
+          <div class="rep-top"><b>${r.kind === 'chat_auto' ? '🤬 Chat filter' : '⚑ Report'}: ${esc(r.reported)}</b><small>${new Date(r.created_at).toLocaleString()}</small></div>
+          <div><span class="tag">${esc(r.reason)}</span> ${r.kind === 'player' ? `from <b>${esc(r.reporter || '?')}</b>` : ''}</div>
+          ${r.details ? `<p class="rep-details">${esc(r.details)}</p>` : ''}
+          ${(r.evidence || []).length ? `<details><summary>${r.evidence.length} message${r.evidence.length > 1 ? 's' : ''} as evidence</summary>
+            <ul class="rep-ev">${r.evidence.map(e => `<li><small>${e.at ? new Date(e.at).toLocaleString() : ''}</small> “${esc(e.said || '')}”</li>`).join('')}</ul></details>` : ''}
+          <div class="rep-actions">
+            <button class="btn small" data-rlook="${esc(r.reported)}">🔎 Look up</button>
+            ${r.status === 'open' ? `<button class="btn small danger" data-rban="${esc(r.reported)}">Ban</button>
+              <button class="btn small primary" data-rres="reviewed">✔ Reviewed</button><button class="btn small" data-rres="dismissed">Dismiss</button>`
+              : `<small>${esc(r.status)}</small><button class="btn small" data-rres="open">Reopen</button>`}
+          </div>
+        </div>`).join('') : '<p class="hint">Nothing here. Calm seas! ⛵</p>';
+    } catch (err) { $('#rep-list').innerHTML = `<p class="status">${esc(err.message)}</p>`; }
+    refreshReportCount();
+  }
+  $('#rep-list').addEventListener('click', async e => {
+    const card = e.target.closest('[data-rid]'); if (!card) return;
+    const id = Number(card.dataset.rid);
+    const look = e.target.closest('[data-rlook]'), ban = e.target.closest('[data-rban]'), res = e.target.closest('[data-rres]');
+    try {
+      if (look) { setDeskTab('pirates'); deskLookup(look.dataset.rlook); return; }
+      if (ban) {
+        if (!confirm(`Ban ${ban.dataset.rban}?`)) return;
+        await Auth.admin.setBan(ban.dataset.rban, true);
+        await Auth.admin.resolve(id, 'reviewed');
+        toast(`${ban.dataset.rban} is banned`);
+      }
+      if (res) await Auth.admin.resolve(id, res.dataset.rres);
+      loadReports();
+    } catch (err) { toast(err.message, 4000); }
+  });
+  async function refreshReportCount() {
+    if (!Auth.isAdmin) return;
+    let n = 0;
+    try { n = await Auth.admin.reportCount(); } catch (_) {}
+    $('#desk-report-count').textContent = n; $('#desk-report-count').classList.toggle('hidden', !n);
+    $('#admin-desk-btn').textContent = n ? `👑 Admin Desk · 📥 ${n} new` : '👑 Admin Desk';
+    $('#g-admin-btn').classList.toggle('has-news', !!n);
+  }
+  setInterval(() => { if (Auth.isAdmin) refreshReportCount(); }, 60000);
+
+  // =====================================================================
+  //  QUICK GAME: a matchmaking queue over Supabase Realtime
+  // =====================================================================
+  const QUICK_SIZE = 4, GATHER_MS = 7000, BOT_OFFER_MS = 20000;
+  const Quick = { ch: null, key: null, joinedAt: 0, matched: false, timer: null, joinTimer: null };
+  async function startQuick() {
+    if (!Auth.enabled || !Auth.client) { toast('Quick Game needs the online server'); return; }
+    if (!Net.available()) { toast('Online play is not available here (offline?)'); return; }
+    leaveQueue();
+    if (Online.role) leaveOnline();
+    Object.assign(Quick, { key: 'q' + Math.random().toString(36).slice(2, 10), joinedAt: Date.now(), matched: false });
+    go('queue');
+    $('#q-title').textContent = 'Searching the seas…'; $('#q-sub').textContent = 'Looking for pirates to play with';
+    $('#q-bots').classList.add('hidden');
+    const ch = Auth.client.channel('bnb-quickplay-v1', { config: { presence: { key: Quick.key }, broadcast: { self: false } } });
+    Quick.ch = ch;
+    ch.on('presence', { event: 'sync' }, quickTick);
+    ch.on('broadcast', { event: 'match' }, ({ payload }) => onQuickMatch(payload));
+    ch.subscribe(async status => {
+      if (status === 'SUBSCRIBED') await ch.track({ name: profile.name, at: Quick.joinedAt, admin: Auth.isAdmin });
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') $('#q-sub').textContent = 'Having trouble reaching the queue — still trying…';
+    });
+    Quick.timer = setInterval(quickTick, 1000);
+  }
+  function queueList() {
+    if (!Quick.ch) return [];
+    const st = Quick.ch.presenceState();
+    return Object.entries(st).map(([key, metas]) => ({ key, ...(metas[0] || {}) }))
+      .filter(x => x.at).sort((a, b) => a.at - b.at || (a.key < b.key ? -1 : 1));
+  }
+  function quickTick() {
+    if (!Quick.ch || Quick.matched || current !== 'queue') return;
+    const list = queueList();
+    const n = Math.max(1, list.length);
+    $('#q-count').textContent = n;
+    $('#q-count-label').textContent = n === 1 ? 'pirate in the queue' : 'pirates in the queue';
+    $('#q-names').innerHTML = list.slice(0, 8).map(x => `<span class="chip-btn${x.key === Quick.key ? ' on' : ''}">${x.admin ? '👑 ' : ''}${esc(cleanName(x.name))}</span>`).join('');
+    const waited = Date.now() - Quick.joinedAt;
+    $('#q-time').textContent = `${Math.floor(waited / 60000)}:${String(Math.floor(waited / 1000) % 60).padStart(2, '0')}`;
+    if (waited > BOT_OFFER_MS && list.length < 2) { $('#q-bots').classList.remove('hidden'); $('#q-sub').textContent = 'Quiet seas right now. Keep waiting, or play with bots.'; }
+    // The longest-waiting pirate captains the match once there are 4, or 2+ have waited a few seconds.
+    if (list.length >= 2 && list[0].key === Quick.key && (list.length >= QUICK_SIZE || Date.now() - list[1].at > GATHER_MS)) formQuickMatch(list.slice(0, QUICK_SIZE));
+  }
+  function formQuickMatch(group) {
+    Quick.matched = true;
+    $('#q-title').textContent = 'Crew found! ⚓'; $('#q-sub').textContent = 'Hoisting the flag…';
+    Net.host(code => {
+      Online.role = 'host'; Online.code = code; Online.started = false; Online.rules = { ...savedRules };
+      Online.seats = [{ id: 'host', ...myProfilePayload(), bot: null, account: Auth.me ? Auth.me.username : null, admin: Auth.isAdmin }];
+      if (!Auth.isAdmin) Online.seats[0].avatar = Avatar.stripAdmin(Online.seats[0].avatar);
+      Online.quick = { expect: group.length - 1 };
+      Quick.ch.send({ type: 'broadcast', event: 'match', payload: { code, members: group.slice(1).map(g => g.key) } });
+      setTimeout(leaveQueue, 800);
+      go('lobby');
+      toast('⚡ Crew found — setting sail as soon as everyone is aboard');
+      setTimeout(quickAutoStart, 15000);                          // don't wait forever for a slow joiner
+    }, err => { Quick.matched = false; toast(Net.describe(err)); });
+  }
+  function onQuickMatch(p) {
+    if (!p || !Array.isArray(p.members) || !p.members.includes(Quick.key) || Quick.matched) return;
+    Quick.matched = true;
+    $('#q-title').textContent = 'Crew found! ⚓'; $('#q-sub').textContent = 'Climbing aboard…';
+    leaveQueue();
+    $('#join-code').value = String(p.code || '').slice(0, 8);
+    doJoin();
+    clearTimeout(Quick.joinTimer);
+    Quick.joinTimer = setTimeout(() => { if (current !== 'lobby' && current !== 'game') { toast('That ship sailed without us — back to the queue'); startQuick(); } }, 20000);
+  }
+  function leaveQueue() {
+    clearInterval(Quick.timer); Quick.timer = null;
+    if (Quick.ch) { try { Quick.ch.untrack(); Auth.client.removeChannel(Quick.ch); } catch (_) {} }
+    Quick.ch = null;
+  }
+  function quickCheckStart() {
+    const humansJoined = Online.seats.filter(x => !x.bot && x.id !== 'host').length;
+    if (Online.quick && humansJoined >= Online.quick.expect) setTimeout(quickAutoStart, 2000);
+  }
+  function quickAutoStart() {
+    if (Online.role !== 'host' || Online.started || !Online.quick) return;
+    Online.quick = null;
+    while (Online.seats.length < QUICK_SIZE) {
+      const b = makeBot(Online.seats);
+      Online.seats.push({ id: 'bot-' + Math.random().toString(36).slice(2, 8), name: b.name, avatar: b.avatar, kit: b.kit, bot: { persona: b.persona } });
+    }
+    hostLobbyBroadcast();
+    $('#lobby-start').click();
+  }
+  $('#quick-btn').addEventListener('click', () => { Sfx.click(); startQuick(); });
+  $('#q-cancel').addEventListener('click', () => { leaveQueue(); go('menu'); });
+  $('#q-bots').addEventListener('click', () => {
+    leaveQueue();
+    const seats = [{ id: 'L0', name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId), bot: null }];
+    while (seats.length < QUICK_SIZE) { const b = makeBot(seats); seats.push({ id: 'L' + seats.length, name: b.name, avatar: b.avatar, kit: b.kit, bot: { persona: b.persona } }); }
+    startLocal(seats, { ...savedRules });
   });
 
   // ---------- boot ----------

@@ -33,7 +33,8 @@
     <div class="account-bar" id="account-bar"></div>
     <nav class="menu-buttons">
       <button class="btn big admin-btn hidden" id="admin-desk-btn">👑 Admin Desk</button>
-      <button class="btn big primary" data-go="local">⚓ Pass &amp; Play</button>
+      <button class="btn big primary quick-btn" id="quick-btn">⚡ Quick Game</button>
+      <button class="btn big" data-go="local">⚓ Pass &amp; Play</button>
       <button class="btn big" data-go="online">🏴‍☠️ Online Voyage</button>
       <button class="btn big" data-go="locker">🎩 Captain's Locker</button>
       <button class="btn big" data-go="forge">🎲 Dice Forge</button>
@@ -49,6 +50,24 @@
         </select>
       </label>
       <span id="device-note"></span>
+    </div>
+  </div>
+  <div class="waves" aria-hidden="true"></div>
+</section>
+
+<!-- ============ QUICK GAME QUEUE ============ -->
+<section id="screen-queue" class="screen">
+  <div class="menu-wrap">
+    <h1 class="logo">Bones <span>&amp;</span> Brine</h1>
+    <div class="panel queue-card">
+      <div class="spyglass" aria-hidden="true">🔭</div>
+      <h2 id="q-title">Searching the seas…</h2>
+      <p class="q-sub" id="q-sub">Looking for pirates to play with</p>
+      <div class="q-count"><b id="q-count">1</b> <span id="q-count-label">pirate in the queue</span></div>
+      <div class="q-names" id="q-names"></div>
+      <p class="q-time" id="q-time">0:00</p>
+      <button class="btn big primary hidden" id="q-bots">Play now with bots</button>
+      <button class="btn ghost" id="q-cancel">Leave queue</button>
     </div>
   </div>
   <div class="waves" aria-hidden="true"></div>
@@ -199,6 +218,15 @@
     <div id="lobby-rules" class="rules-box"></div>
     <button id="lobby-start" class="btn big primary">Set Sail!</button>
     <p id="lobby-wait" class="status">Waiting for the captain to set sail…</p>
+    <div class="chat lobby-chat" data-chat>
+      <div class="chat-head">💬 Ship's chat</div>
+      <div class="chat-log" aria-live="polite"></div>
+      <form class="chat-form" autocomplete="off">
+        <input class="chat-input" maxlength="200" placeholder="Say something, matey…" enterkeyhint="send" autocomplete="off">
+        <button class="btn small primary" type="submit">Send</button>
+      </form>
+      <p class="chat-note"></p>
+    </div>
   </div>
 </section>
 
@@ -229,11 +257,13 @@
     <button class="icon-btn admin-btn hidden" id="g-admin-btn" title="Admin powers" aria-label="Admin powers">👑</button>
     <button class="icon-btn" id="g-items-btn" title="Grub &amp; grog" aria-label="Use an item">🍺</button>
     <button class="icon-btn" id="g-taunt-btn" title="Taunt" aria-label="Taunt">🦜</button>
+    <button class="icon-btn online-only hidden" id="g-chat-btn" title="Chat" aria-label="Chat">💬<i class="badge-dot hidden" id="g-chat-badge"></i></button>
     <button class="icon-btn wide-only" id="g-log-btn" title="Ship's log" aria-label="Ship's log">📜</button>
     <div class="game-menu hidden" id="game-menu" role="menu">
       <button role="menuitem" id="gm-log">📜 Ship's log</button>
       <button role="menuitem" id="g-sound">🔊 Sound on</button>
       <button role="menuitem" id="g-full">⛶ Fullscreen</button>
+      <button role="menuitem" id="gm-report" class="online-only hidden">⚑ Report a player</button>
       <button role="menuitem" id="g-leave" class="danger-item">🚪 Leave game</button>
     </div>
   </header>
@@ -254,6 +284,15 @@
     <div class="taunt-tray hidden" id="taunt-tray"></div>
     <div class="item-tray hidden" id="item-tray"></div>
     <div class="admin-tray hidden" id="admin-tray"></div>
+    <div class="chat game-chat hidden" id="game-chat" data-chat>
+      <div class="chat-head">💬 Table chat <button class="log-btn" id="game-chat-close" type="button" aria-label="Close chat">✕</button></div>
+      <div class="chat-log" aria-live="polite"></div>
+      <form class="chat-form" autocomplete="off">
+        <input class="chat-input" maxlength="200" placeholder="Say something, matey…" enterkeyhint="send" autocomplete="off">
+        <button class="btn small primary" type="submit">Send</button>
+      </form>
+      <p class="chat-note"></p>
+    </div>
   </div>
   <div class="g-bottom">
     <div class="g-hand" id="g-hand"></div>
@@ -282,16 +321,53 @@
   <div class="overlay hidden" id="reveal"><div class="sheet reveal-sheet" id="reveal-body"></div></div>
 </section>
 
+<!-- ============ REPORT A PLAYER ============ -->
+<div class="overlay report-overlay hidden" id="report-overlay" role="dialog" aria-modal="true" aria-label="Report a player">
+  <form class="sheet report-sheet" id="report-form">
+    <div class="desk-head"><h2>⚑ Report a pirate</h2><button class="icon-btn desk-close" type="button" id="report-close" aria-label="Close">✕</button></div>
+    <label class="field col">Who?
+      <select id="rep-who"></select>
+    </label>
+    <label class="field col">What happened?
+      <select id="rep-reason">
+        <option value="Bad language">Bad language</option>
+        <option value="Harassment">Harassment or bullying</option>
+        <option value="Cheating">Cheating</option>
+        <option value="Offensive name or look">Offensive name or look</option>
+        <option value="Spamming">Spamming</option>
+        <option value="Other">Something else</option>
+      </select>
+    </label>
+    <label class="field col">Tell the admin more (optional)
+      <textarea id="rep-details" maxlength="600" rows="3" placeholder="What did they do?"></textarea>
+    </label>
+    <p class="hint" id="rep-evidence-note"></p>
+    <button class="btn big primary" type="submit" id="rep-send">Send report</button>
+    <p class="status" id="rep-status"></p>
+  </form>
+</div>
+
 <!-- ============ ADMIN DESK (pop-up: from the menu or mid-game) ============ -->
 <div class="overlay desk-overlay hidden" id="desk-overlay" role="dialog" aria-modal="true" aria-label="Admin Desk">
   <div class="sheet desk-sheet">
     <div class="desk-head"><h2>👑 Admin Desk</h2><button class="icon-btn desk-close" id="desk-close" aria-label="Close">✕</button></div>
+    <div class="tabs desk-tabs" role="tablist">
+      <button class="tab on" data-dtab="pirates" role="tab">🔎 Pirates</button>
+      <button class="tab" data-dtab="reports" role="tab">📥 Reports <span class="count-pill hidden" id="desk-report-count">0</span></button>
+    </div>
+    <div class="desk-pane" id="desk-pane-reports" hidden>
+      <div class="row tight"><select id="rep-filter"><option value="open">Open</option><option value="reviewed">Reviewed</option><option value="dismissed">Dismissed</option><option value="all">All</option></select>
+        <button class="btn small" id="rep-refresh" type="button">Refresh</button></div>
+      <div id="rep-list" class="rep-list"></div>
+    </div>
+    <div class="desk-pane" id="desk-pane-pirates">
     <div class="desk-players" id="desk-players"></div>
     <form class="desk-find" id="desk-find" autocomplete="off">
       <input id="adm-user" placeholder="Pirate's username" maxlength="16" spellcheck="false" autocapitalize="none" autocorrect="off" enterkeyhint="search">
       <button class="btn primary" id="adm-find" type="submit">Look up</button>
     </form>
     <div id="adm-result" class="adm-result"></div>
+    </div>
     <p class="status" id="adm-status"></p>
   </div>
 </div>
@@ -306,6 +382,7 @@
 <script src="js/dice.js"></script>
 <script src="js/avatar.js"></script>
 <script src="js/net.js"></script>
+<script src="js/chat.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/app.js"></script>
 <script src="models/pirates.js"></script>
