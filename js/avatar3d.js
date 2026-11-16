@@ -6,7 +6,7 @@
 const SCRIPT_BASE = (document.currentScript && document.currentScript.src) || location.href;
 let THREE, GLTFLoader, DRACOLoader;
 
-const HAT_CLIP = { tricorn: 1.97, bicorne: 1.99, bandana: 1.9 };   // hair is trimmed under hats
+const HAT_CLIP = { tricorn: 1.97, bicorne: 1.99, bandana: 1.9, admiral: 1.97 };   // hair is trimmed under hats
 const SHIRT = '#efe6d2';
 
 // What is on the table / in the hands for each pose
@@ -90,7 +90,7 @@ class Pirates {
     if (look.hat && look.hat !== 'none') want.add('hat_' + look.hat);
     if (look.trinket && look.trinket !== 'none') want.add('trinket_' + look.trinket);
     (look.cosmetics || []).forEach(c => want.add('cos_' + c));
-    const parts = poseParts(pose);
+    const parts = poseParts(pose).map(n => look.cup === 'gold' ? n.replace(/^cup_/, 'cupgold_') : n);
     parts.forEach(n => want.add(n));
     // the parrot sits on the right shoulder, so it hops off while that arm is raised
     if (parts.some(n => RAISED.has(n))) want.delete('trinket_parrot');

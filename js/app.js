@@ -15,7 +15,9 @@
     { id: 'smokes', name: 'Pack of Smokes',  price: 2, qty: 5, prop: 'cigarette', icon: 'smokes', emoji: '🚬', verb: 'lights up a smoke', verbYou: 'light up a smoke', ms: 150000 },
     { id: 'cigar',  name: 'Pack of Cigars',  price: 3, qty: 3, prop: 'cigar',     icon: 'cigar',  emoji: '🚬', verb: 'puffs on a fat cigar', verbYou: 'puff on a fat cigar', ms: 240000 },
     { id: 'steak',  name: 'Steak',           price: 1, qty: 1, prop: 'steak',     icon: 'steak',  emoji: '🥩', verb: 'tucks into a steak', verbYou: 'tuck into a steak', ms: 100000 },
-    { id: 'rum',    name: 'Shot of Rum',     price: 1, qty: 1, prop: 'rum',       icon: 'rum',    emoji: '🥃', verb: 'knocks back a shot of rum', verbYou: 'knock back a shot of rum', ms: 40000 }
+    { id: 'rum',    name: 'Shot of Rum',     price: 1, qty: 1, prop: 'rum',       icon: 'rum',    emoji: '🥃', verb: 'knocks back a shot of rum', verbYou: 'knock back a shot of rum', ms: 40000 },
+    // 👑 admin only: never runs out, not sold in the Tavern
+    { id: 'pipe',   name: "Captain's Pipe",  price: 0, qty: 0, prop: 'pipe',      icon: 'pipe',   emoji: '💨', verb: 'lights the captain\'s pipe', verbYou: 'light the captain\'s pipe', ms: 300000, adminOnly: true }
   ];
   const shopItem = id => SHOP.find(x => x.id === id);
   const TAUNTS = ['Arrr!', "Ye be lyin'!", 'Shiver me timbers!', 'Hah! Easy plunder.', 'Walk the plank!', 'Yo ho ho!', 'Bold wager…', 'Fair winds, matey'];
@@ -172,8 +174,10 @@
     $('#locker-options').innerHTML = Object.entries(Avatar.OPTIONS).map(([key, opt]) => {
       const v = a[key];
       if (opt.type === 'list') {
-        const i = opt.values.indexOf(v);
-        return `<div class="opt-row"><span class="opt-label">${opt.label} <small>${i + 1}/${opt.values.length}</small></span><div class="stepper"><button data-k="${key}" data-d="-1" aria-label="Previous ${opt.label}">◀</button><span>${esc(opt.names[v] || v)}</span><button data-k="${key}" data-d="1" aria-label="Next ${opt.label}">▶</button></div></div>`;
+        const vals = Avatar.choices(key, Auth.isAdmin);
+        if (vals.length < 2) return '';            // e.g. the cup choice only exists for the admin
+        const i = vals.indexOf(v);
+        return `<div class="opt-row${Avatar.isAdminValue(key, v) ? ' admin-pick' : ''}"><span class="opt-label">${opt.label} <small>${i + 1}/${vals.length}</small></span><div class="stepper"><button data-k="${key}" data-d="-1" aria-label="Previous ${opt.label}">◀</button><span>${esc(opt.names[v] || v)}</span><button data-k="${key}" data-d="1" aria-label="Next ${opt.label}">▶</button></div></div>`;
       }
       if (opt.type === 'multi') {
         return `<div class="opt-row wide"><span class="opt-label">${opt.label}</span><div class="chips">${opt.values.map(c => `<button class="chip-btn ${a.cosmetics.includes(c) ? 'on' : ''}" data-cos="${c}">${esc(opt.names[c])}</button>`).join('')}</div></div>`;
@@ -190,12 +194,14 @@
     } else {
       const k = b.dataset.k, opt = Avatar.OPTIONS[k]; if (!opt) return;
       if (b.dataset.d) {
-        const i = opt.values.indexOf(profile.avatar[k]);
-        profile.avatar[k] = opt.values[(i + Number(b.dataset.d) + opt.values.length) % opt.values.length];
+        const vals = Avatar.choices(k, Auth.isAdmin);
+        const i = vals.indexOf(profile.avatar[k]);
+        profile.avatar[k] = vals[(i + Number(b.dataset.d) + vals.length) % vals.length];
         if (k === 'base') profile.avatar.skin = Avatar.skinsFor(profile.avatar.base)[1] || Avatar.skinsFor(profile.avatar.base)[0];
       } else profile.avatar[k] = b.dataset.c;
     }
     profile.avatar = Avatar.sanitize(profile.avatar);
+    if (!Auth.isAdmin) profile.avatar = Avatar.stripAdmin(profile.avatar);
     Sfx.click(); saveProfile(); renderLocker();
   });
   $('#locker-name').addEventListener('input', e => { profile.name = cleanName(e.target.value); saveProfile(); });
@@ -284,7 +290,7 @@
   }
   function renderShop() {
     $('#shop-coins').textContent = profile.coins;
-    $('#shop-grid').innerHTML = SHOP.map(it => `
+    $('#shop-grid').innerHTML = SHOP.filter(it => !it.adminOnly).map(it => `
       <div class="shop-card">
         ${itemIcon(it, 96)}
         <b>${esc(it.name)}</b>
@@ -403,6 +409,7 @@
       Online.role = 'host'; Online.code = code; Online.started = false;
       Online.rules = { ...savedRules };
       Online.seats = [{ id: 'host', ...myProfilePayload(), bot: null, account: Auth.me ? Auth.me.username : null, admin: Auth.isAdmin }];
+      if (!Auth.isAdmin) Online.seats[0].avatar = Avatar.stripAdmin(Online.seats[0].avatar);
       go('lobby');
     }, e => { $('#host-btn').disabled = false; setStatus(Net.describe(e)); leaveOnline(); });
   });
@@ -509,6 +516,7 @@
       if (v && v.banned) { Net.sendTo(id, { t: 'error', msg: 'This account has been banned from Bones & Brine.' }); setTimeout(() => Net.drop(id), 400); return; }
       if (v) { prof.name = cleanName(v.username); prof.account = v.username; prof.admin = !!v.is_admin; }
     }
+    if (!prof.admin) prof.avatar = Avatar.stripAdmin(prof.avatar);   // 👑 looks are for the verified admin only
     if (Online.started) return;
     const existing = Online.seats.find(x => x.id === id);
       if (existing) Object.assign(existing, prof);
@@ -536,7 +544,7 @@
       act(seat, { type: String(a.type), qty: Number(a.qty) | 0, face: Number(a.face) | 0 });
     } else if (msg.t === 'taunt') {
       sendTaunt(seat, Number(msg.i) | 0);
-    } else if (msg.t === 'use' && shopItem(msg.id)) {
+    } else if (msg.t === 'use' && shopItem(msg.id) && (!shopItem(msg.id).adminOnly || (Online.seats.find(x => x.id === id) || {}).admin)) {
       sendUse(seat, msg.id);
     }
   }
@@ -863,12 +871,13 @@
   function maybeBotSnack(r) {
     const s = G.s, winner = r.earner;
     if (winner < 0 || !s.players[winner].bot || Math.random() > 0.35) return;
-    const id = pick(SHOP).id;
+    const id = pick(SHOP.filter(it => !it.adminOnly)).id;
     setTimeout(() => { if (G.s === s) sendUse(winner, id); }, 2200);
   }
   /** In-game tavern: use what ye own, or buy on the spot with yer doubloons. */
   function renderItemTray() {
-    $('#item-tray').innerHTML = `<div class="tray-head">Grub &amp; Grog · yer purse: <b>🪙 ${profile.coins}</b></div>` + SHOP.map(it => {
+    $('#item-tray').innerHTML = `<div class="tray-head">Grub &amp; Grog · yer purse: <b>🪙 ${profile.coins}</b></div>` + SHOP.filter(it => !it.adminOnly || Auth.isAdmin).map(it => {
+      if (it.adminOnly) return `<div class="tray-item admin-item">${itemIcon(it, 40)}<span>👑 ${esc(it.name)}<small>admin only · never runs out</small></span><button class="btn small primary" data-use="${it.id}">Light</button></div>`;
       const owned = profile.inv[it.id] | 0;
       const action = owned > 0
         ? `<button class="btn small primary" data-use="${it.id}">Use</button>`
@@ -878,11 +887,13 @@
       ? '<p class="tray-empty">Win doubloons by making other pirates lose dice — then treat yerself.</p>' : '');
   }
   function useItem(id) {
-    if (!(profile.inv[id] > 0) || Date.now() - (G.lastUse || 0) < 3000) return;
+    const it = shopItem(id); if (!it) return;
+    const unlimited = it.adminOnly && Auth.isAdmin;
+    if ((it.adminOnly && !Auth.isAdmin) || (!unlimited && !(profile.inv[id] > 0)) || Date.now() - (G.lastUse || 0) < 3000) return;
     const seat = G.mode === 'local' ? walletSeat() : G.me;
     if (seat < 0 || G.s.players[seat].out) { toast('Ye can only indulge while at the table'); return; }
     G.lastUse = Date.now();
-    profile.inv[id]--; saveProfile();
+    if (!unlimited) { profile.inv[id]--; saveProfile(); }
     sendUse(seat, id);
   }
   $('#g-items-btn').addEventListener('click', () => {
@@ -1052,6 +1063,18 @@
         else if (f >= 0.9 || c < 3000) pose = P3('arms_cut', 'cup_side', plate, 'cut_tools');
         else if (c < 4500) pose = P3('arms_eat', 'cup_side', plate, 'held_fork');
         else { pose = P3('arms_cut', 'cup_side', plate, 'cut_tools'); chew = true; }
+        break;
+      }
+      case 'pipe': {                              // 👑 the captain's churchwarden pipe
+        const c = t % 13000;
+        if (revealing) { pose = P3(...LIFT, 'teeth_pipe'); fx.push({ kind: 'wisp', at: 'teeth_pipe' }); }
+        else if (c >= 8000 && c < 11500) {          // taken out by the bowl: a long, slow exhale
+          pose = P3('arms_cigarhand', 'cup_down', 'hand_pipe');
+          fx.push({ kind: 'wisp', at: 'hand_pipe' }, { kind: 'exhale', at: 'mouth' });
+        } else {
+          pose = P3('arms_rest', 'cup_down', 'teeth_pipe');
+          fx.push({ kind: c >= 11500 || c < 1200 ? 'glow' : 'wisp', at: 'teeth_pipe' });
+        }
         break;
       }
       default: pose = revealing ? 'lift' : 'rest';
@@ -1317,7 +1340,7 @@
   // =====================================================================
   //  ACCOUNTS & ADMIN
   // =====================================================================
-  const ITEM_IDS = SHOP.map(x => x.id);
+  const ITEM_IDS = SHOP.filter(x => !x.adminOnly).map(x => x.id);
   const mySeatIdx = () => G.mode === 'local' ? walletSeat() : G.me;
   const showXray = () => Auth.isAdmin && G.xray && (G.mode !== 'client' || G.xrayFeed);
 
@@ -1405,7 +1428,7 @@
         <div class="adm-line"><span>🪙 <b>${r.coins}</b> doubloons</span>
           ${[-5, -1, 1, 5].map(d => `<button class="btn small" data-coins="${d}">${d > 0 ? '+' : ''}${d}</button>`).join('')}
           <input id="adm-coin-n" type="number" placeholder="±n" style="width:5em"><button class="btn small" data-coins="custom">Apply</button></div>
-        ${SHOP.map(it => `<div class="adm-line"><span>${it.emoji} ${esc(it.name)}: <b>${(r.inv || {})[it.id] | 0}</b></span>
+        ${SHOP.filter(it => !it.adminOnly).map(it => `<div class="adm-line"><span>${it.emoji} ${esc(it.name)}: <b>${(r.inv || {})[it.id] | 0}</b></span>
           <button class="btn small" data-item="${it.id}" data-q="-1">−1</button><button class="btn small" data-item="${it.id}" data-q="1">+1</button></div>`).join('')}
         ${r.is_admin ? '' : `<button class="btn ${r.banned ? 'primary' : 'danger'}" data-ban="${r.banned ? 0 : 1}">${r.banned ? 'Unban' : 'Ban this pirate'}</button>`}
       </div>`;
@@ -1480,6 +1503,7 @@
     profile.inv = Object.fromEntries(ITEM_IDS.map(k => [k, Math.max(0, ((me.inv || {})[k]) | 0)]));
     const d = me.data || {};
     if (d.avatar) profile.avatar = Avatar.sanitize(d.avatar);
+    if (!me.is_admin) profile.avatar = Avatar.stripAdmin(profile.avatar);
     if (Array.isArray(d.kits)) customKits = d.kits.map(Dice.sanitize).filter(Boolean).map(k => ({ ...k, custom: true }));
     if (d.kitId) profile.kitId = d.kitId;
     profile.starterPurse = true;

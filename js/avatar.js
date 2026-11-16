@@ -6,29 +6,34 @@ const Avatar = (() => {
     deckhand: ['#f6d2b3', '#e8b98f', '#d39a6a', '#b07a4d', '#8d5524', '#5c3a21'],
     oldsalt:  ['#f1c9a8', '#dcab83', '#c08657', '#9a6a43', '#74482a', '#4e3020'],
     skeleton: ['#f1ead6', '#d9cfb3', '#b9c4c9', '#c9b38f'],
-    fishfolk: ['#5fb8a5', '#4a9bc2', '#7bbf6a', '#9a7fd1', '#d98a6b']
+    fishfolk: ['#5fb8a5', '#4a9bc2', '#7bbf6a', '#9a7fd1', '#d98a6b'],
+    davyjones: ['#5d8f7c', '#4c7d86', '#6e8c5c', '#7a6e92', '#3f6a5d', '#8a9a6a']
   };
+  // 👑 admin-only looks: Davy Jones, the Admiral's hat and coat, the great macaw and the golden cup
+  const ADMIN_ONLY = { base: ['davyjones'], hat: ['admiral'], top: ['admiral'], trinket: ['macaw'], cup: ['gold'] };
+  const isAdminValue = (k, v) => !!(ADMIN_ONLY[k] && ADMIN_ONLY[k].includes(v));
   const OPTIONS = {
-    base: { label: 'Pirate', type: 'list', values: ['deckhand', 'oldsalt', 'skeleton', 'fishfolk'],
-      names: { deckhand: 'Deckhand', oldsalt: 'Old Salt', skeleton: 'Bones', fishfolk: 'Fishfolk' } },
+    base: { label: 'Pirate', type: 'list', values: ['deckhand', 'oldsalt', 'skeleton', 'fishfolk', 'davyjones'],
+      names: { deckhand: 'Deckhand', oldsalt: 'Old Salt', skeleton: 'Bones', fishfolk: 'Fishfolk', davyjones: '👑 Davy Jones' } },
     skin: { label: 'Skin', type: 'skin' },
     hair: { label: 'Hair', type: 'list', values: ['bald', 'crop', 'messy', 'long', 'ponytail', 'braids', 'dreads', 'mohawk', 'topknot', 'afro', 'slick', 'wild', 'bob'],
       names: { bald: 'Bald', crop: 'Short Crop', messy: 'Messy', long: 'Long', ponytail: 'Ponytail', braids: 'Braids', dreads: 'Dreadlocks', mohawk: 'Mohawk', topknot: 'Top Knot', afro: 'Curly Afro', slick: 'Slicked Back', wild: 'Wild Mane', bob: 'Bob' } },
     hairColor: { label: 'Hair Colour', type: 'color', values: ['#1b1b1b', '#4a2c16', '#8a4b1f', '#c9772d', '#e0c07a', '#9e9e9e', '#f2f2f2', '#9b2226', '#2a6f97', '#6a4c93'] },
-    top: { label: 'Top', type: 'list', values: ['captain', 'striped', 'vest', 'rags', 'naval'],
-      names: { captain: "Captain's Coat", striped: 'Striped Shirt', vest: 'Leather Vest', rags: 'Ragged Shirt', naval: 'Naval Jacket' } },
+    top: { label: 'Top', type: 'list', values: ['captain', 'striped', 'vest', 'rags', 'naval', 'admiral'],
+      names: { captain: "Captain's Coat", striped: 'Striped Shirt', vest: 'Leather Vest', rags: 'Ragged Shirt', naval: 'Naval Jacket', admiral: "👑 Admiral's Coat" } },
     topColor: { label: 'Top Colour', type: 'color', values: ['#8c2323', '#1f3b7a', '#2e5e3a', '#3b2a1a', '#5b2a6e', '#222222', '#a86b2d', '#2f6f73'] },
-    hat: { label: 'Hat', type: 'list', values: ['tricorn', 'bicorne', 'bandana', 'none'],
-      names: { tricorn: 'Tricorn', bicorne: "Captain's Bicorne", bandana: 'Bandana', none: 'No Hat' } },
+    hat: { label: 'Hat', type: 'list', values: ['tricorn', 'bicorne', 'bandana', 'none', 'admiral'],
+      names: { tricorn: 'Tricorn', bicorne: "Captain's Bicorne", bandana: 'Bandana', none: 'No Hat', admiral: "👑 Admiral's Hat" } },
     hatColor: { label: 'Hat Colour', type: 'color', values: ['#2b1d14', '#7a1f1f', '#1f3b7a', '#2e5e3a', '#5b2a6e', '#c9a23a', '#e8e1d0', '#222222'] },
-    trinket: { label: 'Trinket', type: 'list', values: ['none', 'parrot', 'earring', 'necklace', 'spyglass', 'cutlass'],
-      names: { none: 'Nothing', parrot: 'Parrot', earring: 'Gold Earrings', necklace: 'Tooth Necklace', spyglass: 'Spyglass', cutlass: 'Cutlass' } },
+    trinket: { label: 'Trinket', type: 'list', values: ['none', 'parrot', 'earring', 'necklace', 'spyglass', 'cutlass', 'macaw'],
+      names: { none: 'Nothing', parrot: 'Parrot', earring: 'Gold Earrings', necklace: 'Tooth Necklace', spyglass: 'Spyglass', cutlass: 'Cutlass', macaw: '👑 Great Macaw' } },
+    cup: { label: 'Dice Cup', type: 'list', values: ['leather', 'gold'], names: { leather: 'Leather Cup', gold: '👑 Golden Cup' } },
     cosmetics: { label: 'Cosmetics (pick any)', type: 'multi', values: ['eyepatch', 'monocle', 'scar', 'goldtooth', 'warpaint', 'freckles', 'beard', 'braidbeard', 'mustache', 'goatee'],
       names: { eyepatch: 'Eyepatch', monocle: 'Monocle', scar: 'Scar', goldtooth: 'Gold Tooth', warpaint: 'War Paint', freckles: 'Freckles', beard: 'Full Beard', braidbeard: 'Braided Beard', mustache: 'Mustache', goatee: 'Goatee' } },
     bg: { label: 'Flag Colour', type: 'color', values: ['#1d3b53', '#3b1d1d', '#1d3b2a', '#3b331d', '#2a1d3b', '#111111', '#5a3519', '#0f5257'] }
   };
   const DEFAULT = { base: 'deckhand', skin: '#e8b98f', hair: 'messy', hairColor: '#4a2c16', top: 'captain', topColor: '#8c2323',
-    hat: 'tricorn', hatColor: '#2b1d14', trinket: 'none', cosmetics: [], bg: '#1d3b53' };
+    hat: 'tricorn', hatColor: '#2b1d14', trinket: 'none', cup: 'leather', cosmetics: [], bg: '#1d3b53' };
   const FACIAL = ['beard', 'braidbeard', 'mustache', 'goatee'];
 
   const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -64,17 +69,32 @@ const Avatar = (() => {
     return { ...look, cosmetics: list };
   }
 
+  /** The values of an option a player may pick (admin-only ones only for the admin). */
+  const choices = (key, admin) => (OPTIONS[key].values || []).filter(v => admin || !isAdminValue(key, v));
+  /** Swap any admin-only part for a normal one (used for everyone who isn't the admin). */
+  function stripAdmin(look) {
+    const a = sanitize(look);
+    if (isAdminValue('base', a.base)) { a.base = 'oldsalt'; a.skin = SKINS.oldsalt[1]; }
+    if (isAdminValue('hat', a.hat)) a.hat = 'tricorn';
+    if (isAdminValue('top', a.top)) a.top = 'naval';
+    if (isAdminValue('trinket', a.trinket)) a.trinket = 'parrot';
+    if (isAdminValue('cup', a.cup)) a.cup = 'leather';
+    return a;
+  }
+  const hasAdminParts = look => Object.keys(ADMIN_ONLY).some(k => isAdminValue(k, look && look[k]));
+
   function random() {
-    const base = pick(OPTIONS.base.values);
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const base = pick(choices('base', false));
     const cos = [];
     if (Math.random() < 0.5 && base !== 'skeleton') cos.push(pick(FACIAL));
     if (Math.random() < 0.3) cos.push(pick(['eyepatch', 'monocle']));
     if (Math.random() < 0.3) cos.push(pick(['scar', 'goldtooth', 'warpaint', 'freckles']));
     return sanitize({
       base, skin: pick(skinsFor(base)), hair: pick(OPTIONS.hair.values), hairColor: pick(OPTIONS.hairColor.values),
-      top: pick(OPTIONS.top.values), topColor: pick(OPTIONS.topColor.values), hat: pick(OPTIONS.hat.values),
-      hatColor: pick(OPTIONS.hatColor.values), trinket: Math.random() < 0.6 ? pick(OPTIONS.trinket.values) : 'none',
-      cosmetics: cos, bg: pick(OPTIONS.bg.values)
+      top: pick(choices('top', false)), topColor: pick(OPTIONS.topColor.values), hat: pick(choices('hat', false)),
+      hatColor: pick(OPTIONS.hatColor.values), trinket: Math.random() < 0.6 ? pick(choices('trinket', false)) : 'none',
+      cup: 'leather', cosmetics: cos, bg: pick(OPTIONS.bg.values)
     });
   }
 
@@ -108,5 +128,5 @@ const Avatar = (() => {
     return fallback(a, size);
   }
 
-  return { OPTIONS, DEFAULT, SKINS, skinsFor, render, random, sanitize, toggleCosmetic };
+  return { OPTIONS, DEFAULT, SKINS, ADMIN_ONLY, skinsFor, render, random, sanitize, toggleCosmetic, choices, stripAdmin, hasAdminParts, isAdminValue };
 })();

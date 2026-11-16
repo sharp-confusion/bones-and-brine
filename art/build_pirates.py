@@ -1074,6 +1074,301 @@ build('held_fork', HELD, place(mk_fork(), (0.3, -0.84, 1.03), (0, math.radians(-
 build('cut_tools', HELD, point_along(mk_fork(False), (-0.2, -1.1, 0.42), (0.35, 0.15, -0.9))
       + point_along(mk_knife(), (0.26, -1.1, 0.42), (-0.5, 0.05, -0.75)))
 
+# --------------------------------------------------------------------------- admin exclusives
+# Davy Jones, the Admiral's hat and coat, the great macaw, the golden dice cup and the captain's pipe.
+M.update(
+    Barnacle=mat('Barnacle', '#e4ddcc', 0.85), BarnacleDark=mat('BarnacleDark', '#5d5446', 0.9),
+    Ruby=mat('Ruby', '#d0142f', 0.12, 0.2), Emerald=mat('Emerald', '#0fa860', 0.12, 0.2), Sapphire=mat('Sapphire', '#1f5ce0', 0.12, 0.2),
+    DarkGold=mat('DarkGold', '#9a6c12', 0.3, 1.0), Plume=mat('Plume', '#f6f3ec', 0.8), PlumeRed=mat('PlumeRed', '#b5142f', 0.7),
+    Beak=mat('Beak', '#efe8da', 0.4), BeakDark=mat('BeakDark', '#2a2522', 0.4), Feet=mat('Feet', '#6f6a66', 0.7),
+    MacawRed=mat('MacawRed', '#d81f26', 0.55), MacawYellow=mat('MacawYellow', '#ffcc1a', 0.5), MacawBlue=mat('MacawBlue', '#1d63d8', 0.5),
+    MacawGreen=mat('MacawGreen', '#2f9e44', 0.55), Briar=mat('Briar', '#6b3418', 0.35), Medal=mat('Medal', '#e9c25a', 0.25, 1.0),
+    RibbonBlue=mat('RibbonBlue', '#2347a3', 0.6),
+)
+ADMIN = bpy.data.collections.new('admin'); ROOT.children.link(ADMIN)
+
+def bm_list(*items):
+    """Merge a mixed list of bmeshes into one (all freed)."""
+    out = bmesh.new()
+    for b in items:
+        me = bpy.data.meshes.new('_a'); b.to_mesh(me); b.free(); out.from_mesh(me); bpy.data.meshes.remove(me)
+    return out
+
+# ---- Davy Jones: sea-cursed captain with a beard of tentacles -------------------------------
+p = Part('base_davyjones'); base_common(p, ears=False)
+w, pu, sh = eyes(r=0.088, z=1.61, x=0.2, pupil=0.05, look=(0.0, -0.008))
+p.add(w, M['EyeWhite']).add(pu, M['Pupil']).add(sh, M['White'])
+for sx in (-1, 1):   # heavy, scowling brow ridge
+    p.add(lumpy(sphere(surf(sx * 0.2, 1.72, 0.02), 1, (0.17, 0.06, 0.055), (0, sx * 0.28, 0), seg=20, rings=10), 0.01, 9, surf(sx * 0.2, 1.72), 2), M['SkinShade'])
+p.add(sphere(surf(0, 1.46, 0.035), 0.1, (1.25, 0.8, 0.8)), M['Skin'])                     # broad flat nose
+for sx in (-1, 1):
+    p.add(sphere(surf(sx * 0.055, 1.44, 0.075), 0.022, (1, 0.6, 1.2)), M['Dark'])          # nostrils
+# tentacle beard: seven thick octopus arms from the mouth and chin, swaying and curling at the tips,
+# with pale suckers down the front; two short ones at the corners of the mouth
+M['Sucker'] = mat('Sucker', '#b9a397', 0.6)
+BEARD = [  # x at root, root height, length, sway, curl direction, thickness
+    (-0.27, 1.3, 0.55, -0.10, -1, 0.062), (-0.17, 1.25, 0.78, -0.06, 1, 0.074), (-0.07, 1.21, 0.95, 0.04, -1, 0.082),
+    (0.03, 1.2, 1.02, -0.03, 1, 0.085), (0.13, 1.22, 0.86, 0.07, -1, 0.078), (0.22, 1.27, 0.68, 0.05, 1, 0.07),
+    (0.3, 1.32, 0.5, 0.12, 1, 0.06)]
+tent, suck = [], []
+for k, (x, z0, L, sway, curl, th) in enumerate(BEARD):
+    root = surf(x, z0, -0.01)
+    out = (root - HC).normalized()
+    p1 = root + out * 0.1 + Vector((x * 0.15, -0.03, -0.12))
+    p2 = p1 + Vector((sway, -0.04, -L * 0.38))
+    p3 = p2 + Vector((-sway * 0.6, -0.02, -L * 0.34))
+    # curled tip: a small spiral
+    c0 = p3 + Vector((curl * 0.07, -0.05, -0.08))
+    c1 = c0 + Vector((curl * 0.08, -0.02, 0.03))
+    c2 = c1 + Vector((curl * 0.0, -0.01, 0.08))
+    c3 = c2 + Vector((-curl * 0.05, 0.0, 0.02))
+    pts = [root - out * 0.03, p1, p2, p3, c0, c1, c2, c3]
+    tent.append(lock(pts, th, 0.007, 0.92, seg=12, steps=7, center=root + Vector((0, 0.4, 0.3)), taper=1.05))
+    path = catmull(pts, 7)
+    n = len(path)
+    for s in range(5, n - 6, 3):             # suckers on the side facing the viewer
+        a, b = path[s], path[s + 1]
+        T = (b - a).normalized()
+        side = T.cross(Vector((0, 1, 0)))
+        front = T.cross(side).normalized()
+        if front.y > 0:
+            front = -front
+        r_t = th * (1 - (s / (n - 1)) ** 1.05) + 0.007
+        sr = max(0.008, r_t * 0.42)
+        c = a + front * r_t * 0.92
+        rot = Vector((0, 0, 1)).rotation_difference(front).to_euler()
+        suck.append(cyl(c, sr, sr * 0.8, sr * 0.6, rot, seg=12))
+        suck.append(cyl(c + front * sr * 0.32, sr * 0.45, sr * 0.45, sr * 0.1, rot, seg=10))
+for sx in (-1, 1):                           # short mouth-corner tentacles
+    root = surf(sx * 0.2, 1.36, -0.01)
+    tent.append(lock([root, root + Vector((sx * 0.1, -0.08, -0.06)), root + Vector((sx * 0.2, -0.08, -0.02)), root + Vector((sx * 0.24, -0.06, 0.06))],
+                     0.04, 0.006, 0.95, seg=10, steps=6, center=root + Vector((0, 0.4, 0))))
+p.add(bm_list(*tent), M['Skin'])
+p.add(bm_list(*suck), M['Sucker'])
+p.add(sphere(surf(0, 1.3, 0.0), 0.12, (1.6, 0.6, 0.7)), M['SkinShade'])          # dark mouth shadow behind the beard
+# barnacles crusted on the brow and cheek
+for (x, z, r) in ((0.3, 1.83, 0.062), (0.4, 1.74, 0.048), (0.22, 1.92, 0.04), (0.36, 1.92, 0.035), (0.46, 1.62, 0.052),
+                  (0.42, 1.5, 0.036), (0.5, 1.72, 0.03), (-0.36, 1.86, 0.04), (-0.44, 1.6, 0.034), (-0.3, 1.95, 0.028)):
+    c = surf(x, z, -0.005)
+    n = (c - HC).normalized()
+    rot = Vector((0, 0, 1)).rotation_difference(n).to_euler()
+    p.add(cyl(c + n * r * 0.4, r, r * 0.55, r * 0.9, rot, seg=10), M['Barnacle'], smooth=False)
+    p.add(cyl(c + n * r * 0.86, r * 0.42, r * 0.42, r * 0.06, rot, seg=8), M['BarnacleDark'])
+for sx in (-1, 1):   # gills on the neck
+    for k in range(3):
+        p.add(torus((sx * 0.5, -0.05, 1.3 - k * 0.07), 0.08, 0.01, (math.pi / 2, sx * 0.3, 0), (1, 1, 1), seg=12, ring=6, arc=math.pi * 0.8), M['SkinShade'])
+p.finish(ADMIN)
+
+# ---- Admiral's hat: grand tricorn, thick gold lace, skull emblem and plumes ----------------
+p = Part('hat_admiral')
+p.add(cut(sphere((0, 0.02, 2.02), 1, (0.58, 0.56, 0.47)), (0, 0, 1.95), (0, 0, 1)), M['Hat'])
+p.add(tricorn_brim(r_in=0.5, r_out=1.08, rise=0.4, thick=0.06), M['Hat'])
+def adm_rim(off_r, off_z, r):
+    out = bmesh.new()
+    for i in range(120):
+        a, b = 2 * math.pi * i / 120, 2 * math.pi * (i + 1) / 120
+        def rp(a):
+            f = (1 - math.cos(3 * (a + math.pi / 2))) / 2
+            rr = (1.08 + off_r) * (1 + 0.12 * (1 - f))
+            return Vector((rr * math.cos(a), rr * math.sin(a) * 0.96, 1.97 + 0.4 * f + off_z))
+        s = aim(None, rp(a), rp(b), r, r, 8)
+        me = bpy.data.meshes.new('_r'); s.to_mesh(me); s.free(); out.from_mesh(me); bpy.data.meshes.remove(me)
+    return out
+p.add(adm_rim(0.01, 0.035, 0.034), M['Trim'])       # thick gold lace on the edge
+p.add(adm_rim(-0.09, 0.03, 0.014), M['DarkGold'])    # second braid line
+# skull and crossbones emblem on the front peak
+em = Vector((0.0, -0.66, 2.16))
+for sx in (-1, 1):
+    p.add(aim(None, em + Vector((-0.11 * sx, -0.01, -0.1)), em + Vector((0.11 * sx, -0.01, 0.1)), 0.016, 0.016, 8), M['Trim'])
+    for e in (-1, 1):
+        p.add(sphere(em + Vector((0.11 * sx * e, -0.01, 0.1 * e)) + Vector((0.012 * sx * e, 0, 0)), 0.02), M['Trim'])
+p.add(sphere(em + Vector((0, -0.02, 0.02)), 0.072, (1, 0.6, 1)), M['Trim'])
+p.add(box(em + Vector((0, -0.02, -0.045)), (0.07, 0.05, 0.04)), M['Trim'])
+for sx in (-1, 1):
+    p.add(sphere(em + Vector((sx * 0.026, -0.06, 0.03)), 0.018, (1, 0.5, 1)), M['Dark'])
+# ostrich plumes: a fan of soft curling feathers sweeping back from the left side
+PL = random.Random(5)
+plume_base = Vector((-0.4, 0.08, 2.22))
+for k in range(9):
+    t = k / 8
+    col = 'PlumeRed' if k in (2, 5) else 'Plume'
+    L = 0.75 + 0.3 * math.sin(math.pi * t)
+    ang = math.radians(-35 + 70 * t)
+    d = Vector((math.sin(ang) * 0.25 - 0.1, 0.55 + 0.1 * math.cos(ang), 0.45 + 0.15 * math.cos(ang))).normalized()
+    pts = [plume_base, plume_base + d * L * 0.35 + Vector((0, 0, 0.08)), plume_base + d * L * 0.7 + Vector((0, 0.05, 0.06)),
+           plume_base + d * L + Vector((0.04 * math.sin(ang), 0.12, -0.12))]
+    p.add(lock(pts, 0.075, 0.012, 0.35, seg=10, steps=8, wide=(math.cos(ang), 0, 0.3), taper=1.4, swell=0.5), M[col])
+    # wispy barbs along each feather
+    path = catmull(pts, 8)
+    for s in range(3, len(path) - 2, 3):
+        a = path[s]
+        for side in (-1, 1):
+            tipb = a + Vector((side * 0.08 * math.cos(ang), 0.03, side * 0.03 - 0.03)) + Vector((PL.uniform(-0.02, 0.02), 0, PL.uniform(-0.02, 0.02)))
+            p.add(aim(None, a, tipb, 0.012, 0.002, 5), M[col])
+p.add(torus(Vector((-0.4, -0.02, 2.22)), 0.07, 0.03, (math.radians(70), 0, math.radians(-30)), seg=20, ring=8), M['PlumeRed'])   # cockade
+p.add(sphere(Vector((-0.4, -0.04, 2.22)), 0.04, (1, 0.6, 1)), M['Trim'])
+p.finish(ADMIN)
+
+# ---- Admiral's coat: gold braid, big epaulettes, sash, medals and jabot ---------------------
+p = Part('top_admiral')
+p.add(shell(1.05), M['Cloth'])
+p.add(cut(cut(shell(1.07), (0.0, 0, 0), (-1, -1.4, 0)), (0.0, 0, 0), (1, -1.4, 0)), M['Shirt'])
+for sx in (-1, 1):
+    lap = [tsurf(sx * 0.07, 0.08, 1.08, 0.01), tsurf(sx * 0.13, 0.5, 1.08, 0.012), tsurf(sx * 0.2, 0.9, 1.08, 0.012), tsurf(sx * 0.3, 1.0, 1.08, 0.01)]
+    p.add(lock(lap, 0.026, 0.026, 1.0, seg=8, steps=6, taper=1), M['Trim'])                                # braid edge
+    p.add(lock([v + Vector((sx * 0.05, 0.01, 0)) for v in lap], 0.012, 0.012, 1.0, seg=6, steps=6), M['DarkGold'])
+    for z in (0.22, 0.42, 0.62, 0.8):
+        c = tsurf(sx * (0.2 + (0.9 - z) * 0.05), z, 1.06, 0.02)
+        p.add(sphere(c, 0.038, (1, 0.6, 1)), M['Trim'])
+        p.add(torus(c + Vector((0, -0.012, 0)), 0.03, 0.006, (math.pi / 2, 0, 0), seg=12, ring=5), M['DarkGold'])
+    # epaulette: gold board, crown and long fringe
+    ep = Vector((sx * 0.58, 0.0, 0.99))
+    p.add(cyl(ep, 0.25, 0.23, 0.06, (0, sx * 0.48, 0), (1, 0.8, 1), seg=28), M['Trim'])
+    p.add(torus(ep + Vector((0, 0, 0.03)), 0.24, 0.02, (0, sx * 0.48, 0), (1, 0.8, 1), seg=28, ring=6), M['DarkGold'])
+    cc = ep + Vector((sx * 0.03, -0.04, 0.08))       # little gold crown on each epaulette
+    p.add(cyl(cc, 0.055, 0.055, 0.03, (0, sx * 0.48, 0), seg=16), M['Medal'])
+    for k in range(5):
+        a = 2 * math.pi * k / 5
+        b0 = cc + Vector((math.cos(a) * 0.05, math.sin(a) * 0.05, 0.01))
+        p.add(aim(None, b0, b0 + Vector((0, 0, 0.05)), 0.014, 0.002, 6), M['Medal'])
+    p.add(sphere(cc + Vector((0, -0.05, 0.0)), 0.014), M['Ruby'])
+    for k in range(13):
+        a = math.pi * k / 12
+        tip = Vector((sx * (0.58 + math.cos(a) * 0.23), -math.sin(a) * 0.19, 0.96))
+        p.add(aim(None, tip + Vector((0, 0, 0.02)), tip + Vector((sx * 0.02, -0.01, -0.17)), 0.016, 0.012, 6), M['Trim'])
+        p.add(sphere(tip + Vector((sx * 0.02, -0.01, -0.18)), 0.016), M['DarkGold'])
+# silk sash: a flat band hugging the coat from the right shoulder to the left hip, gold-fringed
+band = shell(1.085)
+nrm = Vector((math.sin(math.radians(-32)), 0, math.cos(math.radians(-32))))
+band = cut(cut(band, Vector((0, 0, 0.5)) + nrm * 0.07, -nrm), Vector((0, 0, 0.5)) - nrm * 0.07, nrm)
+p.add(band, M['Red'])
+for sgn in (-1, 1):                          # gold edging along both sides of the sash
+    edge = bmesh.new()
+    pts_e = []
+    for i in range(41):
+        x = -0.75 + 1.5 * i / 40
+        z = 0.5 + (-x * math.tan(math.radians(32))) + sgn * 0.07 / math.cos(math.radians(32))
+        if 0.02 < z < 1.0:
+            pts_e.append(tsurf(x * 0.98, z, 1.09, 0.004))
+    for a, b in zip(pts_e, pts_e[1:]):
+        if (a - b).length < 0.2:
+            s = aim(None, a, b, 0.012, 0.012, 6)
+            me = bpy.data.meshes.new('_se'); s.to_mesh(me); s.free(); edge.from_mesh(me); bpy.data.meshes.remove(me)
+    p.add(edge, M['Trim'])
+buckle = tsurf(0.2, 0.5 - 0.2 * math.tan(math.radians(32)), 1.1, 0.0)
+p.add(box(buckle, (0.13, 0.03, 0.12), (0, math.radians(32), 0)), M['Trim'], smooth=False)
+p.add(box(buckle + Vector((0, -0.016, 0)), (0.08, 0.01, 0.07), (0, math.radians(32), 0)), M['Ruby'], smooth=False)
+# medals on the left chest: ribbons with star medals
+for k, (x, rib) in enumerate(((-0.46, 'RibbonBlue'), (-0.34, 'Red'), (-0.22, 'RibbonBlue'))):
+    top = tsurf(x, 0.8, 1.06, 0.012)
+    p.add(box(top, (0.085, 0.025, 0.13), Vector((0, -1, 0)).rotation_difference((top - Vector((0, 0, 0.42))).normalized()).to_euler()), M[rib], smooth=False)
+    st = bmesh.new()
+    mc = tsurf(x, 0.64, 1.06, 0.04)
+    pts2 = []
+    for i in range(10):
+        r = 0.07 if i % 2 == 0 else 0.03
+        a = -math.pi / 2 + i * math.pi / 5
+        pts2.append(Vector((mc.x + r * math.cos(a), mc.y, mc.z - r * math.sin(a))))
+    vs = [st.verts.new(v) for v in pts2]
+    vb = [st.verts.new(v + Vector((0, 0.015, 0))) for v in pts2]
+    st.faces.new(vs); st.faces.new(vb[::-1])
+    for i in range(10):
+        st.faces.new((vs[i], vb[i], vb[(i + 1) % 10], vs[(i + 1) % 10]))
+    bmesh.ops.recalc_face_normals(st, faces=st.faces)
+    p.add(st, M['Medal'], smooth=False)
+for k, z in enumerate((0.92, 0.83, 0.74)):   # lace jabot
+    p.add(lumpy(sphere(tsurf(0, z, 1.07, 0.03), 0.11 - k * 0.012, (1.15, 0.5, 0.8)), 0.014, 14, tsurf(0, z), k + 3), M['Shirt'])
+p.add(cyl((0, 0.02, 1.02), 0.34, 0.39, 0.18, seg=32), M['Cloth'])      # high collar
+p.add(cut(torus((0, 0.02, 1.1), 0.37, 0.025, seg=40, ring=8), (0, 0.0, 0), (0, 1, 0)), M['Trim'])
+p.finish(ADMIN)
+
+# ---- Great macaw on the left shoulder ---------------------------------------------------------
+BX = Vector((-0.74, 0.04, 1.02))      # where its feet grip the shoulder
+p = Part('trinket_macaw')
+body_c = BX + Vector((-0.02, 0.0, 0.26))
+p.add(sphere(body_c, 1, (0.16, 0.15, 0.27), (0.25, 0, 0)), M['MacawRed'])
+p.add(sphere(body_c + Vector((0.0, -0.06, -0.04)), 1, (0.13, 0.1, 0.2), (0.25, 0, 0)), M['MacawRed'])
+head = body_c + Vector((0.02, -0.07, 0.29))
+p.add(sphere(head, 0.135, (1, 1.05, 1.0)), M['MacawRed'])
+p.add(sphere(head + Vector((0.03, -0.09, 0.0)), 0.075, (1.05, 0.6, 0.95)), M['White'])         # bare face patch
+for k in range(3):
+    p.add(aim(None, head + Vector((-0.02, -0.14, -0.03 + k * 0.025)), head + Vector((0.07, -0.13, -0.03 + k * 0.025)), 0.004, 0.004, 4), M['Dark'])
+p.add(sphere(head + Vector((0.07, -0.1, 0.03)), 0.026), M['Pupil'])
+p.add(sphere(head + Vector((0.075, -0.115, 0.04)), 0.008), M['White'])
+beak_root = head + Vector((0.0, -0.13, -0.01))
+p.add(lock([beak_root, beak_root + Vector((0.0, -0.09, 0.0)), beak_root + Vector((0.0, -0.12, -0.07)), beak_root + Vector((0.0, -0.09, -0.12))],
+           0.06, 0.006, 0.9, seg=10, steps=6, taper=1.2), M['Beak'])
+p.add(lock([beak_root + Vector((0, -0.01, -0.05)), beak_root + Vector((0, -0.07, -0.07)), beak_root + Vector((0, -0.06, -0.1))], 0.035, 0.008, 1.0, seg=8), M['BeakDark'])
+# folded wing (outer side, facing the viewer's left) in red, yellow, blue bands
+for k, (col, z0, L) in enumerate((('MacawRed', 0.12, 0.28), ('MacawYellow', 0.02, 0.34), ('MacawGreen', -0.06, 0.4), ('MacawBlue', -0.14, 0.5))):
+    start = body_c + Vector((-0.12, -0.02 + k * 0.01, z0 + 0.08))
+    pts = [start, start + Vector((-0.03, 0.04, -L * 0.45)), start + Vector((0.0, 0.08, -L))]
+    p.add(lock(pts, 0.1 - k * 0.012, 0.012, 0.3, seg=10, steps=6, wide=(0, 1, 0.2), swell=0.25), M[col])
+# long tail feathers hanging behind the arm
+for k, (col, dx, L) in enumerate((('MacawRed', 0.0, 0.85), ('MacawBlue', -0.05, 0.75), ('MacawRed', 0.05, 0.7), ('MacawBlue', 0.02, 0.62))):
+    s0 = body_c + Vector((dx, 0.1, -0.2))
+    pts = [s0, s0 + Vector((dx * 0.5, 0.08, -L * 0.5)), s0 + Vector((dx, 0.12, -L))]
+    p.add(lock(pts, 0.05, 0.008, 0.3, seg=8, steps=6, wide=(1, 0, 0), swell=0.2), M[col])
+# feet gripping the shoulder
+for sx in (-1, 1):
+    f0 = BX + Vector((sx * 0.05, -0.02, 0.04))
+    for t in (-1, 0, 1):
+        p.add(lock([f0, f0 + Vector((t * 0.035, -0.06, -0.01)), f0 + Vector((t * 0.04, -0.08, -0.05))], 0.016, 0.006, 1.0, seg=6, steps=4), M['Feet'])
+    p.add(aim(None, f0, f0 + Vector((0, 0.0, 0.1)), 0.02, 0.025, 8), M['Feet'])
+# a *great* macaw: scale the whole bird up from its feet and perch it a little further out
+grow = Matrix.Translation(BX + Vector((-0.06, 0.02, -0.02))) @ Matrix.Diagonal((1.45, 1.45, 1.45, 1)) @ Matrix.Translation(-BX)
+bmesh.ops.transform(p.bm, matrix=grow, verts=p.bm.verts)
+p.finish(ADMIN)
+
+# ---- Golden dice cup with jewels --------------------------------------------------------------
+def mk_cup_gold():         # origin = mouth centre, opening facing -Z (upside down), like mk_cup
+    it = [I(cut(cyl((0, 0, 0.21), 0.205, 0.165, 0.42, seg=36), (0, 0, 0.005), (0, 0, 1)), 'Trim'),
+          I(torus((0, 0, 0.02), 0.205, 0.028, seg=40, ring=8), 'DarkGold'),
+          I(torus((0, 0, 0.405), 0.165, 0.024, seg=40, ring=8), 'DarkGold'),
+          I(torus((0, 0, 0.21), 0.19, 0.022, seg=40, ring=8), 'DarkGold'),
+          I(cyl((0, 0, 0.01), 0.185, 0.185, 0.01, seg=36), 'Dark')]
+    gems = ('Ruby', 'Emerald', 'Sapphire')
+    for k in range(9):
+        a = 2 * math.pi * k / 9
+        r = 0.205
+        c = Vector((math.cos(a) * r, math.sin(a) * r, 0.21))
+        rot = Vector((0, 0, 1)).rotation_difference(Vector((math.cos(a), math.sin(a), 0))).to_euler()
+        it.append(I(sphere(c, 0.03, (1, 1, 0.55), rot), gems[k % 3]))
+        it.append(I(torus(c, 0.03, 0.008, rot, seg=12, ring=5), 'DarkGold'))
+    for k in range(18):    # engraved flutes
+        a = 2 * math.pi * k / 18
+        it.append(I(aim(None, (math.cos(a) * 0.2, math.sin(a) * 0.2, 0.05), (math.cos(a) * 0.17, math.sin(a) * 0.17, 0.18), 0.006, 0.006, 4), 'DarkGold'))
+        it.append(I(aim(None, (math.cos(a) * 0.188, math.sin(a) * 0.188, 0.245), (math.cos(a) * 0.165, math.sin(a) * 0.165, 0.38), 0.006, 0.006, 4), 'DarkGold'))
+    # little gold skull on the top
+    it.append(I(sphere((0, 0, 0.47), 0.06, (1, 1, 0.9)), 'Trim'))
+    it.append(I(box((0, -0.01, 0.43), (0.06, 0.05, 0.04)), 'Trim'))
+    for sx in (-1, 1):
+        it.append(I(sphere((sx * 0.022, -0.05, 0.47), 0.015, (1, 0.5, 1)), 'Ruby'))
+    return it
+build('cupgold_down', ADMIN, place(mk_cup_gold(), CUP))
+build('cupgold_side', ADMIN, place(mk_cup_gold(), CUP + Vector((-0.62, 0.05, 0)), (0, 0, 0), 0.85))
+build('cupgold_lift', ADMIN, place(mk_cup_gold(), lift_at, (math.radians(-35), math.radians(25), 0)))
+
+# ---- Captain's pipe (churchwarden) --------------------------------------------------------------
+def mk_pipe(at_bowl=False):
+    """Long-stemmed pipe. Default origin = mouthpiece, stem along +X; at_bowl: origin = bowl centre."""
+    stem = [Vector((0, 0, 0)), Vector((0.16, 0, -0.03)), Vector((0.34, 0, -0.12)), Vector((0.46, 0, -0.24)), Vector((0.5, 0, -0.3))]
+    bowl_c = Vector((0.53, 0, -0.27))
+    it = [I(lock(stem, 0.017, 0.022, 1.0, seg=10, steps=6, taper=1), 'Briar'),
+          I(aim(None, (-0.02, 0, 0.003), (0.05, 0, -0.008), 0.012, 0.016, 10), 'BeakDark'),
+          I(cut(sphere(bowl_c, 1, (0.075, 0.075, 0.1)), bowl_c + Vector((0, 0, 0.07)), (0, 0, -1)), 'Briar'),
+          I(torus(bowl_c + Vector((0, 0, 0.07)), 0.068, 0.012, seg=24, ring=6), 'Briar'),
+          I(cyl(bowl_c + Vector((0, 0, 0.068)), 0.058, 0.058, 0.004, seg=20), 'Dark'),
+          I(lumpy(cyl(bowl_c + Vector((0, 0, 0.06)), 0.05, 0.045, 0.012, seg=16), 0.006, 30, bowl_c, 2), 'Ember'),
+          I(torus(bowl_c + Vector((0, 0, -0.02)), 0.075, 0.008, seg=24, ring=5), 'Trim')]
+    if at_bowl:
+        for bm, _, _ in it:
+            bmesh.ops.transform(bm, matrix=Matrix.Translation(-bowl_c), verts=bm.verts)
+    return it
+build('prop_pipe', PROPS, place(mk_pipe(), (-0.25, 0, 0.12), (0.25, 0, 0.35), 1.15))
+build('teeth_pipe', ADMIN, place(mk_pipe(), MOUTH + Vector((0.06, -0.01, -0.01)), (0, 0, math.radians(-40)), 1.0))
+build('hand_pipe', ADMIN, place(mk_pipe(at_bowl=True), (0.4, -1.03, 0.79), (0, math.radians(-10), math.radians(150)), 1.0))
+
 # --------------------------------------------------------------------------- export
 for ob in ROOT.all_objects:
     ob.select_set(True)
@@ -1142,6 +1437,15 @@ if PREVIEW:
         bpy.ops.render.render(write_still=True)
         for c in tmp:
             bpy.data.objects.remove(c)
+    ADM = ['base_davyjones', 'hat_admiral', 'top_admiral', 'trinket_macaw']
+    sheet('sheet_admin', [ADM + ['table', 'arms_rest', 'cupgold_down'],
+                          ADM + ['table', 'arms_rest', 'cupgold_down', 'teeth_pipe'],
+                          ADM + ['table', 'arms_cigarhand', 'cupgold_down', 'hand_pipe'],
+                          ADM + ['table', 'arms_lift', 'cupgold_lift', 'dice_table']], 2, dx=3.4, dz=3.3, turn=math.radians(-14), px=420, tilt=80)
+    sheet('sheet_admin_parts', [['base_davyjones', 'top_striped', 'hair_bob'], ['base_deckhand', 'hair_crop', 'hat_admiral', 'top_captain'],
+                                ['base_oldsalt', 'hair_crop', 'top_admiral'], ['base_deckhand', 'hair_crop', 'top_vest', 'trinket_macaw']], 4, turn=math.radians(-25), px=300)
+    if os.environ.get('BNB_ONLY_ADMIN'):
+        raise SystemExit(0)
     H = sorted(o.name for o in HAIR.objects)
     sheet('sheet_hair', [['base_deckhand', 'top_striped', h] for h in H], 4, turn=math.radians(-25))
     sheet('sheet_hair_back', [['base_deckhand', 'top_striped', h] for h in H], 4, turn=math.radians(140), px=160)

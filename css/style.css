@@ -512,3 +512,5 @@ body.mobile .log-btn { width: 34px; height: 34px; }
 .adm-line > span { min-width: 12rem; }
 .adm-line input { background: #fffaf0; border: 1px solid #8a6a3a; border-radius: 6px; padding: .3em; }
 .tag.banned { background: var(--blood); color: #fff; }
+.opt-row.admin-pick .stepper span { background: linear-gradient(#f3d27a, #d9a93a); color: #3a2400; font-weight: 800; }
+.tray-item.admin-item { background: linear-gradient(#f3e0a8, #e2bf6a); }
