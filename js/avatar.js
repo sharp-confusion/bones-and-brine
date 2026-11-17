@@ -12,6 +12,19 @@ const Avatar = (() => {
   // 👑 admin-only looks: Davy Jones, the Admiral's hat and coat, the great macaw and the golden cup
   const ADMIN_ONLY = { base: ['davyjones'], hat: ['admiral'], top: ['admiral'], trinket: ['macaw'], cup: ['gold'] };
   const isAdminValue = (k, v) => !!(ADMIN_ONLY[k] && ADMIN_ONLY[k].includes(v));
+  // 🪙 Tavern goods for yer looks: bought once with doubloons in the Locker, then yours to wear
+  const PRICES = { cup: { bone: 4, barrel: 3, kraken: 5, coconut: 3 }, top: { sailor: 4, corset: 4, furcloak: 5, quartermaster: 5 },
+    cosmetics: { nosering: 2, anchor: 2, sideburns: 2, stitches: 2 } };
+  const priceOf = (k, v) => (PRICES[k] && PRICES[k][v]) | 0;
+  /** Swap any paid part this player hasn't bought for a free one. `owned` is a list like ['cup:bone', 'cosmetics:anchor']. */
+  function stripUnowned(look, owned) {
+    const has = (k, v) => !priceOf(k, v) || (owned || []).includes(k + ':' + v);
+    const a = { ...look };
+    if (!has('cup', a.cup)) a.cup = 'leather';
+    if (!has('top', a.top)) a.top = 'captain';
+    a.cosmetics = (a.cosmetics || []).filter(c => has('cosmetics', c));
+    return a;
+  }
   const OPTIONS = {
     base: { label: 'Pirate', type: 'list', values: ['deckhand', 'oldsalt', 'skeleton', 'fishfolk', 'davyjones'],
       names: { deckhand: 'Deckhand', oldsalt: 'Old Salt', skeleton: 'Bones', fishfolk: 'Fishfolk', davyjones: '👑 Davy Jones' } },
@@ -19,17 +32,17 @@ const Avatar = (() => {
     hair: { label: 'Hair', type: 'list', values: ['bald', 'crop', 'messy', 'long', 'ponytail', 'braids', 'dreads', 'mohawk', 'topknot', 'afro', 'slick', 'wild', 'bob'],
       names: { bald: 'Bald', crop: 'Short Crop', messy: 'Messy', long: 'Long', ponytail: 'Ponytail', braids: 'Braids', dreads: 'Dreadlocks', mohawk: 'Mohawk', topknot: 'Top Knot', afro: 'Curly Afro', slick: 'Slicked Back', wild: 'Wild Mane', bob: 'Bob' } },
     hairColor: { label: 'Hair Colour', type: 'color', values: ['#1b1b1b', '#4a2c16', '#8a4b1f', '#c9772d', '#e0c07a', '#9e9e9e', '#f2f2f2', '#9b2226', '#2a6f97', '#6a4c93'] },
-    top: { label: 'Top', type: 'list', values: ['captain', 'striped', 'vest', 'rags', 'naval', 'admiral'],
-      names: { captain: "Captain's Coat", striped: 'Striped Shirt', vest: 'Leather Vest', rags: 'Ragged Shirt', naval: 'Naval Jacket', admiral: "👑 Admiral's Coat" } },
+    top: { label: 'Top', type: 'list', values: ['captain', 'striped', 'vest', 'rags', 'naval', 'sailor', 'corset', 'furcloak', 'quartermaster', 'admiral'],
+      names: { captain: "Captain's Coat", striped: 'Striped Shirt', vest: 'Leather Vest', rags: 'Ragged Shirt', naval: 'Naval Jacket', sailor: "Sailor's Blouse", corset: 'Laced Corset', furcloak: 'Fur Cloak', quartermaster: "Quartermaster's Coat", admiral: "👑 Admiral's Coat" } },
     topColor: { label: 'Top Colour', type: 'color', values: ['#8c2323', '#1f3b7a', '#2e5e3a', '#3b2a1a', '#5b2a6e', '#222222', '#a86b2d', '#2f6f73'] },
     hat: { label: 'Hat', type: 'list', values: ['tricorn', 'bicorne', 'bandana', 'none', 'admiral'],
       names: { tricorn: 'Tricorn', bicorne: "Captain's Bicorne", bandana: 'Bandana', none: 'No Hat', admiral: "👑 Admiral's Hat" } },
     hatColor: { label: 'Hat Colour', type: 'color', values: ['#2b1d14', '#7a1f1f', '#1f3b7a', '#2e5e3a', '#5b2a6e', '#c9a23a', '#e8e1d0', '#222222'] },
     trinket: { label: 'Trinket', type: 'list', values: ['none', 'parrot', 'earring', 'necklace', 'spyglass', 'cutlass', 'macaw'],
       names: { none: 'Nothing', parrot: 'Parrot', earring: 'Gold Earrings', necklace: 'Tooth Necklace', spyglass: 'Spyglass', cutlass: 'Cutlass', macaw: '👑 Great Macaw' } },
-    cup: { label: 'Dice Cup', type: 'list', values: ['leather', 'gold'], names: { leather: 'Leather Cup', gold: '👑 Golden Cup' } },
-    cosmetics: { label: 'Cosmetics (pick any)', type: 'multi', values: ['eyepatch', 'monocle', 'scar', 'goldtooth', 'warpaint', 'freckles', 'beard', 'braidbeard', 'mustache', 'goatee'],
-      names: { eyepatch: 'Eyepatch', monocle: 'Monocle', scar: 'Scar', goldtooth: 'Gold Tooth', warpaint: 'War Paint', freckles: 'Freckles', beard: 'Full Beard', braidbeard: 'Braided Beard', mustache: 'Mustache', goatee: 'Goatee' } },
+    cup: { label: 'Dice Cup', type: 'list', values: ['leather', 'bone', 'barrel', 'kraken', 'coconut', 'gold'], names: { leather: 'Leather Cup', bone: 'Bone Cup', barrel: 'Barrel Cup', kraken: 'Kraken Cup', coconut: 'Coconut Cup', gold: '👑 Golden Cup' } },
+    cosmetics: { label: 'Cosmetics (pick any)', type: 'multi', values: ['eyepatch', 'monocle', 'scar', 'goldtooth', 'warpaint', 'freckles', 'beard', 'braidbeard', 'mustache', 'goatee', 'nosering', 'anchor', 'sideburns', 'stitches'],
+      names: { eyepatch: 'Eyepatch', monocle: 'Monocle', scar: 'Scar', goldtooth: 'Gold Tooth', warpaint: 'War Paint', freckles: 'Freckles', beard: 'Full Beard', braidbeard: 'Braided Beard', mustache: 'Mustache', goatee: 'Goatee', nosering: 'Nose Ring', anchor: 'Anchor Tattoo', sideburns: 'Sideburns', stitches: 'Stitches' } },
     bg: { label: 'Flag Colour', type: 'color', values: ['#1d3b53', '#3b1d1d', '#1d3b2a', '#3b331d', '#2a1d3b', '#111111', '#5a3519', '#0f5257'] }
   };
   const DEFAULT = { base: 'deckhand', skin: '#e8b98f', hair: 'messy', hairColor: '#4a2c16', top: 'captain', topColor: '#8c2323',
@@ -128,5 +141,5 @@ const Avatar = (() => {
     return fallback(a, size);
   }
 
-  return { OPTIONS, DEFAULT, SKINS, ADMIN_ONLY, skinsFor, render, random, sanitize, toggleCosmetic, choices, stripAdmin, hasAdminParts, isAdminValue };
+  return { OPTIONS, DEFAULT, SKINS, ADMIN_ONLY, PRICES, priceOf, stripUnowned, skinsFor, render, random, sanitize, toggleCosmetic, choices, stripAdmin, hasAdminParts, isAdminValue };
 })();

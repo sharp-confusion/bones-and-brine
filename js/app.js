@@ -139,8 +139,39 @@
   let customKits = (store.get('bnb.kits', []) || []).map(Dice.sanitize).filter(Boolean).map(k => ({ ...k, custom: true }));
   const allKits = () => Dice.PRESETS.concat(customKits);
   const kitById = id => allKits().find(k => k.id === id) || Dice.PRESETS[0];
+
+  // ---------- owned goods: paid cups / tops / cosmetics and ready-made dice kits ----------
+  const KIT_PRICE = 2, CUSTOM_KIT_PRICE = 4, FREE_KIT = 'bone';
+  if (!Array.isArray(profile.owned)) {
+    profile.owned = [];
+    if (profile.kitId && profile.kitId !== FREE_KIT && Dice.PRESETS.some(k => k.id === profile.kitId)) profile.owned.push('kit:' + profile.kitId);   // keep the dice ye already use
+  }
+  const owns = key => Auth.isAdmin || profile.owned.includes(key);
+  const kitOwned = k => !!k && (k.custom || k.id === FREE_KIT || owns('kit:' + k.id));
+  const lookPrice = (k, v) => owns(k + ':' + v) ? 0 : Avatar.priceOf(k, v);
+  /** Paid parts the pirate is trying on but hasn't bought. */
+  function unownedParts(look) {
+    const out = [];
+    ['cup', 'top'].forEach(k => { const p = lookPrice(k, look[k]); if (p) out.push({ key: k + ':' + look[k], name: Avatar.OPTIONS[k].names[look[k]], price: p }); });
+    (look.cosmetics || []).forEach(c => { const p = lookPrice('cosmetics', c); if (p) out.push({ key: 'cosmetics:' + c, name: Avatar.OPTIONS.cosmetics.names[c], price: p }); });
+    return out;
+  }
+  /** The look actually worn at the table: anything not bought comes off. */
+  const wornLook = look => Auth.isAdmin ? look : Avatar.stripUnowned(look, profile.owned);
+  /** Spend doubloons on goods. Returns true if bought. */
+  function buyGoods(items) {
+    const total = items.reduce((s, x) => s + x.price, 0);
+    if (!items.length) return true;
+    if (profile.coins < total) { toast(`Ye need 🪙 ${total} for that, but yer purse holds 🪙 ${profile.coins}. Win some dice first!`, 3500); return false; }
+    profile.coins -= total;
+    items.forEach(x => { if (!profile.owned.includes(x.key)) profile.owned.push(x.key); });
+    logAct(`Bought ${items.map(x => x.name).join(', ')} for 🪙 ${total}`);
+    saveProfile(); Sfx.coin(); vibrate(30);
+    toast(`Bought ${items.map(x => x.name).join(', ')}! (🪙 ${profile.coins} left)`, 3000);
+    return true;
+  }
   /** Everything about yer pirate that is saved to a signed-in account in the cloud. */
-  const cloudData = () => ({ coins: profile.coins, inv: profile.inv, data: { avatar: profile.avatar, kitId: profile.kitId, kits: customKits } });
+  const cloudData = () => ({ coins: profile.coins, inv: profile.inv, data: { avatar: profile.avatar, kitId: profile.kitId, kits: customKits, owned: profile.owned } });
   function saveProfile() {
     store.set('bnb.profile', profile); renderMenuProfile();
     if (Auth.me) Auth.save(cloudData());
@@ -153,6 +184,10 @@
   let lockerViewer = null;
   function go(name) {
     if (name !== 'locker' && lockerViewer) { lockerViewer.stop(); lockerViewer = null; }
+    if (current === 'locker' && name !== 'locker' && typeof unownedParts === 'function') {
+      const left = unownedParts(profile.avatar);
+      if (left.length) { profile.avatar = wornLook(profile.avatar); saveProfile(); toast(`Took off ${left.map(x => x.name).join(', ')}. Buy it in the Locker to wear it at the table.`, 4000); }
+    }
     $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + name));
     current = name;
     if (onShow[name]) onShow[name]();
@@ -190,16 +225,19 @@
     const k = kitById(profile.kitId);
     $('#locker-kit').innerHTML = [1, 3, 5].map(f => Dice.render(f, k, 34)).join('') + `<span>${esc(k.name)}</span>`;
     const a = profile.avatar;
-    $('#locker-options').innerHTML = Object.entries(Avatar.OPTIONS).map(([key, opt]) => {
+    const trying = unownedParts(a);
+    const buyBar = trying.length ? `<div class="buy-bar"><span>🛍️ Trying on: ${trying.map(x => `<b>${esc(x.name)}</b> 🪙 ${x.price}`).join(' · ')}</span><button class="btn small primary" data-buyall="1">Buy${trying.length > 1 ? ' all' : ''} · 🪙 ${trying.reduce((s, x) => s + x.price, 0)}</button></div>` : '';
+    $('#locker-options').innerHTML = buyBar + Object.entries(Avatar.OPTIONS).map(([key, opt]) => {
       const v = a[key];
       if (opt.type === 'list') {
         const vals = Avatar.choices(key, Auth.isAdmin);
         if (vals.length < 2) return '';            // e.g. the cup choice only exists for the admin
         const i = vals.indexOf(v);
-        return `<div class="opt-row${Avatar.isAdminValue(key, v) ? ' admin-pick' : ''}"><span class="opt-label">${opt.label} <small>${i + 1}/${vals.length}</small></span><div class="stepper"><button data-k="${key}" data-d="-1" aria-label="Previous ${opt.label}">◀</button><span>${esc(opt.names[v] || v)}</span><button data-k="${key}" data-d="1" aria-label="Next ${opt.label}">▶</button></div></div>`;
+        const price = lookPrice(key, v);
+        return `<div class="opt-row${Avatar.isAdminValue(key, v) ? ' admin-pick' : ''}${price ? ' for-sale' : ''}"><span class="opt-label">${opt.label} <small>${i + 1}/${vals.length}</small>${price ? ` <b class="price-tag">🪙 ${price}</b>` : ''}</span><div class="stepper"><button data-k="${key}" data-d="-1" aria-label="Previous ${opt.label}">◀</button><span>${esc(opt.names[v] || v)}</span><button data-k="${key}" data-d="1" aria-label="Next ${opt.label}">▶</button></div></div>`;
       }
       if (opt.type === 'multi') {
-        return `<div class="opt-row wide"><span class="opt-label">${opt.label}</span><div class="chips">${opt.values.map(c => `<button class="chip-btn ${a.cosmetics.includes(c) ? 'on' : ''}" data-cos="${c}">${esc(opt.names[c])}</button>`).join('')}</div></div>`;
+        return `<div class="opt-row wide"><span class="opt-label">${opt.label}</span><div class="chips">${opt.values.map(c => { const p = lookPrice('cosmetics', c); return `<button class="chip-btn ${a.cosmetics.includes(c) ? 'on' : ''}" data-cos="${c}">${esc(opt.names[c])}${p ? ` <b class="price-tag">🪙 ${p}</b>` : ''}</button>`; }).join('')}</div></div>`;
       }
       const values = opt.type === 'skin' ? Avatar.skinsFor(a.base) : opt.values;
       return `<div class="opt-row"><span class="opt-label">${opt.label}</span><div class="swatches">${values.map(c => `<button class="sw ${v === c ? 'on' : ''}" style="background:${c}" data-k="${key}" data-c="${c}" aria-label="${opt.label} ${c}"></button>`).join('')}</div></div>`;
@@ -208,6 +246,7 @@
   onShow.locker = renderLocker;
   $('#locker-options').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.buyall) { if (buyGoods(unownedParts(profile.avatar))) renderLocker(); return; }
     if (b.dataset.cos) {
       profile.avatar = Avatar.toggleCosmetic(profile.avatar, b.dataset.cos);
     } else {
@@ -244,7 +283,7 @@
   function renderForge(roll) {
     if (!draft) openInForge(kitById(profile.kitId));
     const src = sourceKit();
-    $('#kit-grid').innerHTML = allKits().map(k => `<button class="kit-card ${k.id === draftSource ? 'sel' : ''}" data-kit="${esc(k.id)}">${k.id === profile.kitId ? '<span class="badge">Equipped</span>' : ''}${k.custom ? '<span class="badge mine">Yours</span>' : ''}<span class="dd">${Dice.render(5, k, 34)}${Dice.render(1, k, 34)}</span>${esc(k.name)}</button>`).join('');
+    $('#kit-grid').innerHTML = allKits().map(k => `<button class="kit-card ${k.id === draftSource ? 'sel' : ''}" data-kit="${esc(k.id)}">${k.id === profile.kitId ? '<span class="badge">Equipped</span>' : ''}${k.custom ? '<span class="badge mine">Yours</span>' : ''}${kitOwned(k) ? '' : `<span class="badge price">🪙 ${KIT_PRICE}</span>`}<span class="dd">${Dice.render(5, k, 34)}${Dice.render(1, k, 34)}</span>${esc(k.name)}</button>`).join('');
     $('#forge-preview').innerHTML = [1, 2, 3, 4, 5, 6].map((f, i) => `<span class="${roll ? 'roll' : ''}" style="animation-delay:${i * 60}ms">${Dice.render(f, draft, 68)}</span>`).join('');
     chipRow($('#f-pipShape'), 'pipShape', Dice.PIP_SHAPES, 5);
     chipRow($('#f-wild'), 'wild', Dice.WILD_SYMBOLS, 1);
@@ -253,9 +292,11 @@
     const isCustom = !!(src && src.custom);
     $('#f-update').disabled = !isCustom || !dirty;
     $('#f-delete').disabled = !isCustom;
-    $('#f-equip').textContent = dirty ? 'Save & Equip' : (draftSource === profile.kitId ? 'Equipped ✓' : 'Equip');
+    const newCost = Auth.isAdmin ? 0 : CUSTOM_KIT_PRICE, buyCost = src && !kitOwned(src) ? KIT_PRICE : 0;
+    $('#f-save').textContent = `Save as New${newCost ? ` · 🪙 ${newCost}` : ''}`;
+    $('#f-equip').textContent = dirty ? (isCustom ? 'Save & Equip' : `Save & Equip${newCost ? ` · 🪙 ${newCost}` : ''}`) : (draftSource === profile.kitId ? 'Equipped ✓' : buyCost ? `Buy & Equip · 🪙 ${buyCost}` : 'Equip');
     $('#f-equip').disabled = !dirty && draftSource === profile.kitId;
-    $('#forge-hint').textContent = isCustom ? 'This be yer own design.' : (src ? 'A ready-made kit — tweak it and save as yer own.' : 'A fresh design — save it to keep it.');
+    $('#forge-hint').textContent = isCustom ? 'This be yer own design. Changing it is free.' : (src ? (kitOwned(src) ? 'A ready-made kit. Tweak it and save as yer own.' : `A ready-made kit: 🪙 ${KIT_PRICE} to own. Or tweak it and save yer own design for 🪙 ${CUSTOM_KIT_PRICE}.`) : `A fresh design. Saving it costs 🪙 ${CUSTOM_KIT_PRICE}.`);
   }
   onShow.forge = () => renderForge(true);
   $('#kit-grid').addEventListener('click', e => { const b = e.target.closest('[data-kit]'); if (b) { Sfx.rattle(); openInForge(kitById(b.dataset.kit)); } });
@@ -270,12 +311,14 @@
     renderForge(false);
   });
   function saveNewKit() {
+    if (!Auth.isAdmin && !buyGoods([{ key: 'design', name: 'a new dice design', price: CUSTOM_KIT_PRICE }])) return null;
+    profile.owned = profile.owned.filter(x => x !== 'design');
     const k = { ...Dice.sanitize(draft), id: 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), custom: true };
     if (!k.name.trim()) k.name = 'My Dice';
     customKits.push(k); saveKits(); draftSource = k.id; draft = { ...k };
     return k;
   }
-  $('#f-save').addEventListener('click', () => { saveNewKit(); toast('Kit saved to yer chest'); fillForgeForm(); renderForge(false); });
+  $('#f-save').addEventListener('click', () => { if (!saveNewKit()) return; toast('Kit saved to yer chest'); fillForgeForm(); renderForge(false); });
   $('#f-update').addEventListener('click', () => {
     const i = customKits.findIndex(k => k.id === draftSource); if (i < 0) return;
     customKits[i] = { ...Dice.sanitize(draft), id: draftSource, custom: true }; saveKits(); toast('Changes saved'); renderForge(false); renderMenuProfile();
@@ -291,8 +334,10 @@
     const src = sourceKit();
     if (!sameKit(draft, src)) {
       if (src && src.custom) { const i = customKits.findIndex(k => k.id === draftSource); customKits[i] = { ...Dice.sanitize(draft), id: draftSource, custom: true }; saveKits(); }
-      else saveNewKit();
+      else if (!saveNewKit()) return;
     }
+    const k = sourceKit();
+    if (k && !kitOwned(k) && !buyGoods([{ key: 'kit:' + k.id, name: k.name + ' dice', price: KIT_PRICE }])) return;
     profile.kitId = draftSource; saveProfile(); Sfx.coin(); toast('Dice equipped!'); renderForge(false);
   });
   $('#forge-new').addEventListener('click', () => {
@@ -441,7 +486,7 @@
   // ---------- online ----------
   const Online = { role: null, code: '', seats: [], rules: { ...savedRules }, started: false, watch: false, watchers: new Set() };
   const setStatus = m => { $('#online-status').textContent = m; };
-  const myProfilePayload = () => ({ name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId) });
+  const myProfilePayload = () => ({ name: profile.name, avatar: wornLook(profile.avatar), kit: kitById(profile.kitId) });
   // `account` = the server-verified username (null for guests); `admin` = verified admin
   // disguised Quick Game crewmates go out as ordinary players; only an admin's game is told they're bots
   const publicSeat = (x, admin) => ({ id: x.id, name: x.name, avatar: x.avatar, kit: x.kit, bot: x.bot && (!x.bot.disguise || admin) ? { persona: x.bot.persona } : null, account: x.account || null, admin: !!x.admin });
@@ -1751,6 +1796,7 @@
     if (!me.is_admin) profile.avatar = Avatar.stripAdmin(profile.avatar);
     if (Array.isArray(d.kits)) customKits = d.kits.map(Dice.sanitize).filter(Boolean).map(k => ({ ...k, custom: true }));
     if (d.kitId) profile.kitId = d.kitId;
+    if (Array.isArray(d.owned)) profile.owned = d.owned.filter(x => typeof x === 'string').slice(0, 300);
     profile.starterPurse = true;
     store.set('bnb.kits', customKits);
     store.set('bnb.profile', profile);

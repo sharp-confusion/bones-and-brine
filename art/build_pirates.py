@@ -683,6 +683,52 @@ for k, z in enumerate((0.9, 0.8, 0.7)):   # lace jabot
 p.add(cyl((0, 0.0, 1.0), 0.32, 0.36, 0.14, seg=28), M['Cloth'])
 p.finish(TOPS)
 
+# --- shop tops (paid in the Locker) ---
+M.update(Fur=mat('Fur', '#d9ccb2', 0.95), Iron=mat('Iron', '#4a4d52', 0.4, 0.8))
+p = Part('top_sailor')
+p.add(shell(1.05), M['Shirt'])
+p.add(box((0, 0.42, 0.86), (0.78, 0.06, 0.42), (math.radians(-12), 0, 0)), M['Cloth'], smooth=False)     # square sailor collar
+for z0 in (0.7, 0.98):
+    p.add(box((0, 0.46, z0), (0.8, 0.065, 0.025), (math.radians(-12), 0, 0)), M['White'], smooth=False)
+for sx in (-1, 1):
+    p.add(aim(None, (sx * 0.34, -0.2, 1.0), (sx * 0.05, -0.55, 0.72), 0.05, 0.04, 8), M['Cloth'])
+knot = tsurf(0, 0.7, 1.07, 0.03)
+p.add(sphere(knot, 0.06, (1.1, 0.7, 0.9)), M['Cloth'])
+p.add(aim(None, knot, tsurf(0, 0.45, 1.07, 0.03), 0.05, 0.03, 6), M['Cloth'])
+p.finish(TOPS)
+
+p = Part('top_corset')
+p.add(shell(1.04), M['Shirt'])
+p.add(cut(shell(1.075), (0, 0, 0.7), (0, 0, -1)), M['Cloth'])
+for z in (0.18, 0.32, 0.46, 0.6):
+    for sx in (-1, 1):
+        p.add(sphere(tsurf(sx * 0.07, z, 1.09, 0.0), 0.02), M['Trim'])
+    p.add(aim(None, tsurf(-0.07, z, 1.09, 0.01), tsurf(0.07, z + 0.14, 1.09, 0.01), 0.008, 0.008, 5), M['Leather'])
+    p.add(aim(None, tsurf(0.07, z, 1.09, 0.01), tsurf(-0.07, z + 0.14, 1.09, 0.01), 0.008, 0.008, 5), M['Leather'])
+for k in range(4):     # ruffled neckline
+    p.add(lumpy(sphere(tsurf((k - 1.5) * 0.17, 0.92, 1.06, 0.02), 0.07, (1.2, 0.5, 0.7)), 0.01, 12, tsurf(0, 0.9), k), M['White'])
+p.finish(TOPS)
+
+p = Part('top_furcloak')
+p.add(shell(1.06), M['Cloth'])
+p.add(lumpy(torus((0, 0.02, 1.0), 0.42, 0.13, (0, 0, 0), (1, 0.85, 0.75), seg=40, ring=10), 0.035, 9, (0, 0, 1.0), 7), M['Fur'])
+for sx in (-1, 1):
+    p.add(sphere((sx * 0.13, -0.5, 0.86), 0.05, (1, 0.6, 1)), M['Trim'])
+p.add(aim(None, (-0.12, -0.53, 0.84), (0.12, -0.53, 0.8), 0.012, 0.012, 6), M['Trim'])
+p.finish(TOPS)
+
+p = Part('top_quartermaster')
+p.add(shell(1.05), M['Cloth'])
+p.add(cut(cut(shell(1.07), (0.0, 0, 0), (-1, -1.6, 0)), (0.0, 0, 0), (1, -1.6, 0)), M['Leather'])   # waistcoat front
+for sx in (-1, 1):
+    for z in (0.2, 0.38, 0.56, 0.74):
+        p.add(sphere(tsurf(sx * 0.12, z, 1.09, 0.0), 0.032, (1, 0.6, 1)), M['Brass'])
+    p.add(box(tsurf(sx * 0.42, 0.22, 1.07, 0.01), (0.2, 0.03, 0.07), (0, 0, sx * 0.5)), M['Cloth'], smooth=False)   # pocket flaps
+for k in range(3):      # cravat
+    p.add(lumpy(sphere(tsurf(0, 0.95 - k * 0.09, 1.07, 0.03), 0.09 - k * 0.012, (1.1, 0.6, 0.85)), 0.012, 12, tsurf(0, 0.9), k + 3), M['White'])
+p.add(cyl((0, 0.02, 1.02), 0.33, 0.37, 0.15, seg=28), M['Cloth'])
+p.finish(TOPS)
+
 # --------------------------------------------------------------------------- trinkets
 TRINK = bpy.data.collections.new('trinkets'); ROOT.children.link(TRINK)
 p = Part('trinket_parrot')
@@ -802,6 +848,31 @@ p = Part('cos_mustache'); p.add(mustache(), M['Hair']); p.finish(COS)
 p = Part('cos_goatee')
 p.add(lumpy(sphere(surf(0, 1.13, 0.05), 0.12, (0.95, 0.6, 1.5)), 0.015, 8, surf(0, 1.13), 3), M['Hair'])
 p.add(aim(None, surf(0, 1.06, 0.06), surf(0, 1.06, 0.06) + Vector((0, -0.06, -0.2)), 0.07, 0.01, 10), M['Hair'])
+p.finish(COS)
+
+# --- shop cosmetics (paid in the Locker) ---
+M.update(Ink=mat('Ink', '#24406e', 0.6), Thread=mat('Thread', '#1a1412', 0.7))
+p = Part('cos_nosering')
+p.add(torus(surf(0.06, 1.4, 0.04), 0.035, 0.009, (math.pi / 2, 0, 0.4), seg=20, ring=6), M['Trim'])
+p.finish(COS)
+p = Part('cos_anchor')          # little anchor tattoo on the left cheek
+ax, az = -0.32, 1.44
+r = face_rot(ax, az)
+p.add(box(surf(ax, az, 0.004), (0.012, 0.012, 0.13), r), M['Ink'], smooth=False)
+p.add(box(surf(ax, az + 0.045, 0.004), (0.07, 0.012, 0.012), r), M['Ink'], smooth=False)
+p.add(torus(surf(ax, az + 0.075, 0.004), 0.014, 0.005, (math.pi / 2, 0, r[2]), seg=12, ring=5), M['Ink'])
+p.add(torus(surf(ax, az - 0.03, 0.004), 0.045, 0.006, (math.pi / 2, 0, r[2]), seg=16, ring=5, arc=math.pi), M['Ink'])
+p.finish(COS)
+p = Part('cos_sideburns')
+for sx in (-1, 1):
+    p.add(lumpy(sphere(surf(sx * 0.5, 1.5, 0.02), 0.09, (0.6, 0.8, 1.7), face_rot(sx * 0.5, 1.5)), 0.015, 9, surf(sx * 0.5, 1.5), 4 + sx), M['Hair'])
+p.finish(COS)
+p = Part('cos_stitches')       # a sewn-up cut across the nose
+a, b = surf(-0.24, 1.6, 0.012), surf(0.12, 1.5, 0.012)
+p.add(aim(None, a, b, 0.018, 0.018, 8), M['Scar'])
+for t in (0.12, 0.3, 0.5, 0.7, 0.88):
+    c = a.lerp(b, t) + Vector((0, -0.015, 0))
+    p.add(box(c, (0.012, 0.012, 0.09), (0, 0.25, 0)), M['Thread'], smooth=False)
 p.finish(COS)
 
 # --------------------------------------------------------------------------- consumables, table, arms & poses
@@ -1384,6 +1455,62 @@ for k, tilt in ((1, 0.17), (2, -0.17)):
     at = CUP + Vector((0.0, 0.0, 0.07))
     build('cup_shake%d' % k, MID, place(mk_cup(), at, (0.05 * k, tilt, 0)))
     build('cupgold_shake%d' % k, MID, place(mk_cup_gold(), at, (0.05 * k, tilt, 0)))
+# --- shop dice cups (paid in the Locker); every pose the leather cup has: down, side, lift, liftmid, shake1/2 ---
+M.update(Bone=mat('Bone', '#e9dfc6', 0.55), BoneShade=mat('BoneShade', '#b8a888', 0.7), Kraken=mat('Kraken', '#2f6b6a', 0.5),
+         KrakenDark=mat('KrakenDark', '#1d4a52', 0.55), Coconut=mat('Coconut', '#6b4425', 0.95), CocoIn=mat('CocoIn', '#f3ece0', 0.6),
+         BarrelWood=mat('BarrelWood', '#8a5a2b', 0.8))
+def mk_cup_bone():
+    it = [I(cut(cyl((0, 0, 0.21), 0.2, 0.17, 0.42, seg=28), (0, 0, 0.005), (0, 0, 1)), 'Bone'),
+          I(torus((0, 0, 0.02), 0.2, 0.026, seg=28, ring=8), 'BoneShade'),
+          I(cyl((0, 0, 0.01), 0.18, 0.18, 0.01, seg=28), 'Dark')]
+    for k in range(7):                 # rib bones wrapped round the cup
+        a = 2 * math.pi * k / 7
+        it.append(I(aim(None, (math.cos(a) * 0.2, math.sin(a) * 0.2, 0.06), (math.cos(a + 0.5) * 0.175, math.sin(a + 0.5) * 0.175, 0.38), 0.02, 0.016, 6), 'BoneShade'))
+    it.append(I(sphere((0, 0, 0.5), 0.1, (1, 0.95, 0.9)), 'Bone'))       # skull knob
+    for sx in (-1, 1):
+        it.append(I(sphere((sx * 0.04, -0.085, 0.51), 0.025, (1, 0.6, 1)), 'Dark'))
+    it.append(I(box((0, -0.06, 0.44), (0.08, 0.06, 0.05)), 'Bone'))
+    return it
+def mk_cup_barrel():
+    it = [I(cyl((0, 0, 0.01), 0.18, 0.18, 0.01, seg=24), 'Dark'), I(cyl((0, 0, 0.42), 0.17, 0.17, 0.02, seg=24), 'BarrelWood')]
+    for k in range(12):                # staves, bulging in the middle
+        a = 2 * math.pi * (k + 0.5) / 12
+        for z0, z1, r0, r1 in ((0.005, 0.21, 0.19, 0.205), (0.21, 0.42, 0.205, 0.175)):
+            it.append(I(aim(None, (math.cos(a) * r0, math.sin(a) * r0, z0), (math.cos(a) * r1, math.sin(a) * r1, z1), 0.05, 0.05, 4), 'BarrelWood', False))
+    for z, r in ((0.06, 0.2), (0.36, 0.188)):
+        it.append(I(torus((0, 0, z), r + 0.012, 0.014, seg=32, ring=6), 'Iron'))
+    return it
+def mk_cup_kraken():
+    it = [I(cut(cyl((0, 0, 0.21), 0.2, 0.16, 0.42, seg=28), (0, 0, 0.005), (0, 0, 1)), 'Kraken'),
+          I(torus((0, 0, 0.02), 0.2, 0.024, seg=32, ring=8), 'KrakenDark'),
+          I(cyl((0, 0, 0.01), 0.18, 0.18, 0.01, seg=28), 'Dark')]
+    for k in range(5):                 # tentacles curling up the sides
+        a = 2 * math.pi * k / 5
+        pts = [Vector((math.cos(a + t * 1.1) * (0.215 - t * 0.04), math.sin(a + t * 1.1) * (0.215 - t * 0.04), 0.03 + t * 0.42)) for t in (0, 0.33, 0.66, 1.0)]
+        it.append(I(lock(pts, 0.035, 0.008, 1.0, seg=8, steps=6, taper=1), 'KrakenDark'))
+        for t in (0.15, 0.4, 0.65):
+            c = pts[0].lerp(pts[-1], t); c = Vector((c.x * 1.12, c.y * 1.12, c.z))
+            it.append(I(sphere(c, 0.012, (1, 1, 0.6)), 'Sucker' if 'Sucker' in M else 'Bone'))
+    it.append(I(sphere((0, 0, 0.44), 0.07, (1, 1, 0.7)), 'KrakenDark'))
+    return it
+def mk_cup_coconut():
+    it = [I(cut(lumpy(sphere((0, 0, 0.12), 0.23, (1, 1, 1.45)), 0.012, 14, (0, 0, 0.12), 9), (0, 0, 0.005), (0, 0, 1)), 'Coconut'),
+          I(torus((0, 0, 0.01), 0.225, 0.014, seg=32, ring=6), 'CocoIn'),
+          I(cyl((0, 0, 0.012), 0.21, 0.21, 0.01, seg=28), 'Dark'),
+          I(torus((0, 0, 0.2), 0.24, 0.018, seg=32, ring=6), 'Cork')]
+    for k in range(3):                 # the three "eyes"
+        a = 2 * math.pi * k / 3
+        it.append(I(sphere((math.cos(a) * 0.05, math.sin(a) * 0.05, 0.445), 0.025, (1, 1, 0.5)), 'Dark'))
+    return it
+SHOPCUPS = bpy.data.collections.new('shopcups'); ROOT.children.link(SHOPCUPS)
+for cname, fn in (('bone', mk_cup_bone), ('barrel', mk_cup_barrel), ('kraken', mk_cup_kraken), ('coconut', mk_cup_coconut)):
+    build('cup%s_down' % cname, SHOPCUPS, place(fn(), CUP))
+    build('cup%s_side' % cname, SHOPCUPS, place(fn(), CUP + Vector((-0.62, 0.05, 0)), (0, 0, 0), 0.85))
+    build('cup%s_lift' % cname, SHOPCUPS, place(fn(), lift_at, (math.radians(-35), math.radians(25), 0)))
+    build('cup%s_liftmid' % cname, SHOPCUPS, place(fn(), mid_cup_at, mid_cup_rot))
+    for k, tilt in ((1, 0.17), (2, -0.17)):
+        build('cup%s_shake%d' % (cname, k), SHOPCUPS, place(fn(), CUP + Vector((0.0, 0.0, 0.07)), (0.05 * k, tilt, 0)))
+
 # drink raised half-way
 build('arms_drinkmid', MID, L_REST() + arm(1, (0.86, -0.47, 0.38), (0.42, -0.84, 0.86), (-0.65, -0.42, 0.32)))
 build('mid_drink', MID, place(mk_tankard(), (0.24, -0.93, 0.74), (0, math.radians(-20), math.radians(-6)), 0.85))
@@ -1471,6 +1598,13 @@ if PREVIEW:
         bpy.ops.render.render(write_still=True)
         for c in tmp:
             bpy.data.objects.remove(c)
+    sheet('sheet_shop', [['base_deckhand', 'hair_crop', 'top_sailor', 'cos_nosering', 'table', 'arms_rest', 'cupbone_down'],
+                         ['base_oldsalt', 'hair_long', 'top_corset', 'cos_anchor', 'table', 'arms_rest', 'cupbarrel_down'],
+                         ['base_deckhand', 'hair_slick', 'top_furcloak', 'cos_sideburns', 'table', 'arms_rest', 'cupkraken_down'],
+                         ['base_oldsalt', 'hair_crop', 'top_quartermaster', 'cos_stitches', 'table', 'arms_rest', 'cupcoconut_down']],
+          4, dx=3.4, dz=3.3, turn=math.radians(-14), px=300, tilt=80)
+    if os.environ.get('BNB_ONLY_SHOP'):
+        raise SystemExit(0)
     ADM = ['base_davyjones', 'hat_admiral', 'top_admiral', 'trinket_macaw']
     sheet('sheet_admin', [ADM + ['table', 'arms_rest', 'cupgold_down'],
                           ADM + ['table', 'arms_rest', 'cupgold_down', 'teeth_pipe'],

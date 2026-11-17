@@ -90,7 +90,7 @@ class Pirates {
     if (look.hat && look.hat !== 'none') want.add('hat_' + look.hat);
     if (look.trinket && look.trinket !== 'none') want.add('trinket_' + look.trinket);
     (look.cosmetics || []).forEach(c => want.add('cos_' + c));
-    const parts = poseParts(pose).map(n => look.cup === 'gold' ? n.replace(/^cup_/, 'cupgold_') : n);
+    const parts = poseParts(pose).map(n => look.cup && look.cup !== 'leather' ? n.replace(/^cup_/, 'cup' + look.cup + '_') : n);
     parts.forEach(n => want.add(n));
     // the parrot sits on the right shoulder, so it hops off while that arm is raised
     if (parts.some(n => RAISED.has(n))) want.delete('trinket_parrot');

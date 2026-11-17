@@ -10,15 +10,23 @@ const Dice = (() => {
     { id: 'timber',   name: "Ship's Timber",   face: '#b0743f', face2: '#6b3f1d', pip: '#f3e0b5', edge: '#3d2410', pipShape: 'dot',     wild: 'compass',    pattern: 'grain',   round: 10 },
     { id: 'ghost',    name: 'Ghost Ship',      face: '#eef6ff', face2: '#a9c2d9', pip: '#3d5a80', edge: '#6f88a6', pipShape: 'skull',   wild: 'skull',      pattern: 'none',    round: 24 },
     { id: 'siren',    name: "Siren's Scale",   face: '#3fb6c4', face2: '#1b5d8a', pip: '#fff4d6', edge: '#123f5e', pipShape: 'heart',   wild: 'star',       pattern: 'scales',  round: 22 },
-    { id: 'powder',   name: 'Black Powder',    face: '#2a2a2a', face2: '#0d0d0d', pip: '#e8b44c', edge: '#5c4512', pipShape: 'number',  wild: 'crossbones', pattern: 'stripes', round: 8 }
+    { id: 'powder',   name: 'Black Powder',    face: '#2a2a2a', face2: '#0d0d0d', pip: '#e8b44c', edge: '#5c4512', pipShape: 'number',  wild: 'crossbones', pattern: 'stripes', round: 8 },
+    { id: 'seaglass', name: 'Sea Glass',       face: '#a8e0d2', face2: '#4f9e94', pip: '#11423c', edge: '#2d7268', pipShape: 'drop',    wild: 'anchor',     pattern: 'speckle', round: 28 },
+    { id: 'pearl',    name: 'Mermaid Pearl',   face: '#fbf6ee', face2: '#e3cfd9', pip: '#8a5a7a', edge: '#b996ab', pipShape: 'ring',    wild: 'heart',      pattern: 'none',    round: 34 },
+    { id: 'volcano',  name: 'Volcanic Rock',   face: '#3a2a26', face2: '#140c0a', pip: '#ff7a2e', edge: '#7a2a0a', pipShape: 'gem',     wild: 'skull',      pattern: 'cracks',  round: 12 },
+    { id: 'navy',     name: 'Royal Navy',      face: '#24407a', face2: '#11204a', pip: '#f2f2f2', edge: '#c9a23a', pipShape: 'star',    wild: 'crown',      pattern: 'stripes', round: 14 },
+    { id: 'map',      name: 'Treasure Map',    face: '#efd9a6', face2: '#c9a565', pip: '#8c2323', edge: '#6b4a22', pipShape: 'square',  wild: 'flag',       pattern: 'checker', round: 6 },
+    { id: 'moonlit',  name: 'Moonlit Tide',    face: '#2c2f5a', face2: '#11132e', pip: '#f6e7a1', edge: '#4a4f8a', pipShape: 'moon',    wild: 'moon',       pattern: 'waves',   round: 26 }
   ];
-  const PIP_SHAPES = ['dot', 'diamond', 'star', 'heart', 'coin', 'skull', 'anchor', 'number'];
-  const WILD_SYMBOLS = ['pip', 'skull', 'crossbones', 'anchor', 'compass', 'crown', 'star'];
-  const PATTERNS = ['none', 'grain', 'speckle', 'stripes', 'scales', 'waves'];
+  const PIP_SHAPES = ['dot', 'diamond', 'star', 'heart', 'coin', 'skull', 'anchor', 'number', 'moon', 'ring', 'square', 'drop', 'gem'];
+  const WILD_SYMBOLS = ['pip', 'skull', 'crossbones', 'anchor', 'compass', 'crown', 'star', 'moon', 'flag', 'gem', 'heart'];
+  const PATTERNS = ['none', 'grain', 'speckle', 'stripes', 'scales', 'waves', 'polka', 'checker', 'zigzag', 'cracks'];
   const LABELS = {
     dot: 'Dots', diamond: 'Diamonds', star: 'Stars', heart: 'Hearts', coin: 'Coins', skull: 'Skulls', anchor: 'Anchors', number: 'Numerals',
     pip: 'Plain pip', crossbones: 'Crossbones', compass: 'Compass', crown: 'Crown',
-    none: 'Smooth', grain: 'Wood grain', speckle: 'Speckled', stripes: 'Striped', scales: 'Scales', waves: 'Waves'
+    none: 'Smooth', grain: 'Wood grain', speckle: 'Speckled', stripes: 'Striped', scales: 'Scales', waves: 'Waves',
+    moon: 'Moons', ring: 'Rings', square: 'Squares', drop: 'Drops', gem: 'Gems', flag: 'Jolly Roger',
+    polka: 'Polka dots', checker: 'Checkered', zigzag: 'Zigzag', cracks: 'Cracked'
   };
 
   const C = 50, Y = 48, O = 22;
@@ -52,6 +60,12 @@ const Dice = (() => {
       case 'skull': return g(x, y, r, `<path d="M-9 -1A9 9 0 1 1 9 -1L9 3Q9 6 6 6L6 10L-6 10L-6 6Q-9 6 -9 3Z" fill="${c}"/><circle cx="-3.6" cy="0" r="2.8" fill="${bg}"/><circle cx="3.6" cy="0" r="2.8" fill="${bg}"/><path d="M0 3.4L-1.5 6H1.5Z" fill="${bg}"/><path d="M-2.6 7.6V10M0 7.6V10M2.6 7.6V10" stroke="${bg}" stroke-width="1.1"/>`);
       case 'crossbones': return g(x, y, r, `<g stroke="${c}" stroke-width="3" stroke-linecap="round"><path d="M-10 -10L10 10M10 -10L-10 10"/></g><g fill="${c}"><circle cx="-11" cy="-8" r="2.4"/><circle cx="-8" cy="-11" r="2.4"/><circle cx="11" cy="8" r="2.4"/><circle cx="8" cy="11" r="2.4"/><circle cx="11" cy="-8" r="2.4"/><circle cx="8" cy="-11" r="2.4"/><circle cx="-11" cy="8" r="2.4"/><circle cx="-8" cy="11" r="2.4"/></g>`);
       case 'anchor': return g(x, y, r, `<g fill="none" stroke="${c}" stroke-width="2.8" stroke-linecap="round"><circle cy="-8" r="2.8"/><path d="M0 -5V10M-5.5 -1.5H5.5M-9 3Q-8 10.5 0 10.5Q8 10.5 9 3"/></g>`);
+      case 'moon': return `<circle cx="${x}" cy="${y}" r="${r * 1.15}" fill="${c}"/><circle cx="${x + r * 0.55}" cy="${y - r * 0.35}" r="${r}" fill="${bg}"/>`;
+      case 'ring': return `<circle cx="${x}" cy="${y}" r="${r * 0.82}" fill="none" stroke="${c}" stroke-width="${(r * 0.42).toFixed(2)}"/>`;
+      case 'square': return `<rect x="${x - r * 0.9}" y="${y - r * 0.9}" width="${r * 1.8}" height="${r * 1.8}" rx="${r * 0.25}" fill="${c}"/>`;
+      case 'drop': return g(x, y, r, `<path d="M0 -12Q9 0 9 4A9 9 0 0 1 -9 4Q-9 0 0 -12Z" fill="${c}"/>`);
+      case 'gem': return g(x, y, r, `<path d="M-10 -4L-5 -10H5L10 -4L0 11Z" fill="${c}"/><path d="M-10 -4H10M-5 -10L-2 -4L0 11M5 -10L2 -4" fill="none" stroke="${bg}" stroke-width="1" opacity=".55"/>`);
+      case 'flag': return g(x, y, r, `<path d="M-10 -11V12" stroke="${c}" stroke-width="2.2"/><path d="M-9 -11H11L7 -4L11 3H-9Z" fill="${c}"/><circle cx="1" cy="-5" r="3" fill="${bg}"/><path d="M-3 0L5 0" stroke="${bg}" stroke-width="1.5"/>`);
       case 'crown': return g(x, y, r, `<path d="M-11 7L-11 -6L-5.5 0L0 -10L5.5 0L11 -6L11 7Z" fill="${c}"/><rect x="-11" y="7" width="22" height="3" fill="${c}"/>`);
       default: return `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`;
     }
@@ -65,6 +79,10 @@ const Dice = (() => {
       case 'speckle': return `<pattern ${u} width="20" height="20"><g fill="${c}" opacity=".45"><circle cx="3" cy="4" r="1.2"/><circle cx="13" cy="9" r=".9"/><circle cx="7" cy="15" r="1.4"/><circle cx="17" cy="17" r=".8"/></g></pattern>`;
       case 'scales': return `<pattern ${u} width="16" height="10"><g fill="none" stroke="${c}" stroke-width="1.2" opacity=".45"><path d="M0 10A8 8 0 0 1 16 10"/><path d="M-8 5A8 8 0 0 1 8 5M8 5A8 8 0 0 1 24 5"/></g></pattern>`;
       case 'waves': return `<pattern ${u} width="24" height="12"><path d="M0 6Q6 0 12 6T24 6" fill="none" stroke="${c}" stroke-width="1.4" opacity=".45"/></pattern>`;
+      case 'polka': return `<pattern ${u} width="18" height="18"><g fill="${c}" opacity=".35"><circle cx="4.5" cy="4.5" r="3"/><circle cx="13.5" cy="13.5" r="3"/></g></pattern>`;
+      case 'checker': return `<pattern ${u} width="20" height="20"><g fill="${c}" opacity=".22"><rect width="10" height="10"/><rect x="10" y="10" width="10" height="10"/></g></pattern>`;
+      case 'zigzag': return `<pattern ${u} width="16" height="10"><path d="M0 8L4 2L8 8L12 2L16 8" fill="none" stroke="${c}" stroke-width="1.4" opacity=".45"/></pattern>`;
+      case 'cracks': return `<pattern ${u} width="100" height="100"><path d="M8 20L28 34L22 52L40 70M28 34L50 30L62 12M62 70L78 58L92 72M78 58L74 40" fill="none" stroke="${c}" stroke-width="1.3" opacity=".5"/></pattern>`;
       default: return '';
     }
   }
