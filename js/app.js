@@ -2426,6 +2426,12 @@
       : `Just played Bones & Brine, pirate liar's dice 🏴‍☠️🎲 Come out-bluff me:`);
   });
 
+  // privacy & fair-play note on the main menu
+  const showPrivacy = on => $('#privacy-overlay').classList.toggle('hidden', !on);
+  $('#privacy-btn').addEventListener('click', () => { Sfx.click(); showPrivacy(true); });
+  ['#privacy-close', '#privacy-ok'].forEach(s => $(s).addEventListener('click', () => showPrivacy(false)));
+  $('#privacy-overlay').addEventListener('click', e => { if (e.target.id === 'privacy-overlay') showPrivacy(false); });
+
   // ---------- boot ----------
   window.addEventListener('avatar3d-ready', () => {
     renderMenuProfile();

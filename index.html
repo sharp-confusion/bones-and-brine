@@ -65,6 +65,7 @@
         </select>
       </label>
       <span id="device-note"></span>
+      <p class="privacy-note">🔒 No ads, no trackers, nothing sold. To keep games fair and chat friendly, the ship's admin can see who's online and what's happening at the tables. <button class="linkish" id="privacy-btn">What exactly?</button></p>
     </div>
   </div>
   <div class="waves" aria-hidden="true"></div>
@@ -349,6 +350,29 @@
 </section>
 
 <!-- ============ REPORT A PLAYER ============ -->
+<div class="overlay privacy-overlay hidden" id="privacy-overlay" role="dialog" aria-modal="true" aria-label="Privacy and fair play">
+  <div class="sheet privacy-sheet">
+    <div class="desk-head"><h2>🔒 Privacy &amp; fair play</h2><button class="icon-btn desk-close" type="button" id="privacy-close" aria-label="Close">✕</button></div>
+    <p>Bones &amp; Brine is a free game made by one person. There are no ads, no tracking cookies and no analytics, and your data is never sold. Accounts are stored with Supabase, the service that runs sign-in.</p>
+    <h3>While you're playing</h3>
+    <p>To catch cheaters and keep chat clean, the admin can see the pirates who are online right now:</p>
+    <ul>
+      <li>your pirate name (or username) and doubloons</li>
+      <li>which part of the game you're in, and what's happening at your table</li>
+      <li>your recent in-game moves, like joining a game, winning a die or buying grog</li>
+      <li>your browser, device type, screen size and language</li>
+    </ul>
+    <p>The admin can also quietly drop by an online table, like a referee watching a match, to check that everyone plays fair.</p>
+    <p class="pv-good">None of this is saved. It disappears the moment you close the game. The admin <b>cannot</b> see your location, your other tabs or anything outside this game, and the Admin Desk never shows your IP address.</p>
+    <h3>If you make an account</h3>
+    <p>We keep your username, password (encrypted), doubloons, goods, pirate look, daily-chest streak and dice won, so your progress follows you. Messages caught by the swear filter and reports you send or receive are kept so the admin can review them.</p>
+    <h3>Guests</h3>
+    <p>Playing as a guest keeps your pirate and purse on your own device only.</p>
+    <p class="hint">Want your account and its data deleted? Tell the admin (in a game chat, or with a report that says "delete my account") and it will be removed.</p>
+    <button class="btn primary" type="button" id="privacy-ok">Aye, got it</button>
+  </div>
+</div>
+
 <div class="overlay report-overlay hidden" id="report-overlay" role="dialog" aria-modal="true" aria-label="Report a player">
   <form class="sheet report-sheet" id="report-form">
     <div class="desk-head"><h2>⚑ Report a pirate</h2><button class="icon-btn desk-close" type="button" id="report-close" aria-label="Close">✕</button></div>
