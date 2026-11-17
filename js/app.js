@@ -795,10 +795,10 @@
 
   function effects(prev) {
     const s = G.s; if (!s) return;
-    if (!prev || s.round !== prev.round) { Sfx.rattle(); G.rollAnim = true; }
+    if (!prev || s.round !== prev.round) { Sfx.rattle(); G.rollAnim = true; G.roundAt = Date.now(); setTimeout(warmTable, SHAKE_MS + 150); }
     else if (s.history.length > prev.hist && s.phase === 'bidding') Sfx.bid();
     if (prev && prev.phase === 'bidding' && s.phase !== 'bidding') {
-      Sfx.liar(); vibrate([70, 40, 70]);
+      Sfx.liar(); vibrate([70, 40, 70]); G.revealAt = Date.now();
       const r = s.result;
       awardCoins(r);
       if (G.mode !== 'client') maybeBotSnack(r);
@@ -867,6 +867,7 @@
       // lasts across rounds until it's finished; the seat animates through the item's loop (see seatFrame)
       const now = Date.now();
       G.uses[seat] = { id, start: now, end: now + it.ms };
+      warm(p.avatar, itemFramePoses(id));
       renderSeats();
     } else {
       const smoke = (id === 'smokes' || id === 'cigar') ? '<i class="puff"></i><i class="puff"></i><i class="puff"></i><i class="puff"></i>' : '';
@@ -987,7 +988,7 @@
       const isTurn = s.phase === 'bidding' && s.turn === i;
       const isMe = G.mode === 'local' ? i === G.viewer : i === G.me;
       el.className = 'seat' + (isTurn ? ' turn' : '') + (p.out ? ' out' : '') + (isMe ? ' me' : '') + (y < 42 ? ' upper' : '');
-      el.style.left = x + '%'; el.style.top = y + '%';
+      el.style.left = x + '%'; el.style.top = y + '%'; el.style.setProperty('--breath', '-' + (i * 0.73).toFixed(2) + 's');
       let bubble = '';
       const t = G.taunts[i];
       const cb = (G.chatBubbles || {})[i];
@@ -1018,46 +1019,60 @@
   // --- item animations: each use is a loop of 3D poses that lasts until the item is finished ---------
   const P3 = (...parts) => 'parts:table,' + parts.join(',');
   const burnt = f => f < 0.4 ? 'L' : f < 0.75 ? 'M' : 'S';          // how far a smoke has burnt down
+  /** Pick the value for time c from steps [[until, value], ...] (the last value is used past the end). */
+  const seq = (c, steps) => { for (const [until, v] of steps) if (c < until) return v; return steps[steps.length - 1][1]; };
+  const SHAKE_MS = 1300, LIFT_MID_MS = 380;
   /** What a seat looks like right now: { key, pose, fx: [{kind, at}], chew } */
   function seatFrame(i, now) {
     const s = G.s, p = s.players[i];
     const revealing = s.phase !== 'bidding' && p.dice.length > 0;
-    const LIFT = ['arms_lift', 'cup_lift', 'dice_table'];
+    // the cup comes up in two stages at the reveal
+    const LIFT = now - (G.revealAt || 0) < LIFT_MID_MS ? ['arms_liftmid', 'cup_liftmid', 'dice_table'] : ['arms_lift', 'cup_lift', 'dice_table'];
     let u = G.uses[i];
     if (u && now >= u.end) { delete G.uses[i]; u = null; }
     if (!u) {
-      const pose = revealing ? 'lift' : 'rest';
-      return { key: pose, pose, fx: [] };
+      if (revealing) { const pose = P3(...LIFT); return { key: pose, pose, fx: [] }; }
+      const sinceRound = now - (G.roundAt || 0);
+      if (s.phase === 'bidding' && !p.out && sinceRound < SHAKE_MS) {   // rattling the dice in the cup
+        const k = 1 + (Math.floor(sinceRound / 140) + i) % 2;
+        const pose = P3('arms_rest', 'cup_shake' + k);
+        return { key: pose, pose, fx: [] };
+      }
+      return { key: 'rest', pose: 'rest', fx: [] };
     }
     const t = now - u.start, f = Math.min(1, t / (u.end - u.start));
     let pose, fx = [], chew = false;
     switch (u.id) {
       case 'drink': {
         const e = f > 0.5 ? '_empty' : '';
-        const c = t % 10000;
-        if (revealing) pose = P3(...LIFT, 'table_drink' + e);
-        else if (f > 0.85 || c < 6500) pose = P3('arms_rest', 'cup_down', 'table_drink' + (f > 0.85 ? '_empty' : e));
-        else if (c < 7400 || c >= 9500) pose = P3('arms_holddrink', 'cup_down', 'chest_drink' + e);
+        if (revealing) { pose = P3(...LIFT, 'table_drink' + e); break; }
+        if (f > 0.85) { pose = P3('arms_rest', 'cup_down', 'table_drink_empty'); break; }
+        const step = seq(t % 10000, [[6000, 'table'], [6450, 'hold'], [6800, 'mid'], [8800, 'sip'], [9150, 'mid'], [9600, 'hold'], [10000, 'table']]);
+        if (step === 'table') pose = P3('arms_rest', 'cup_down', 'table_drink' + e);
+        else if (step === 'hold') pose = P3('arms_holddrink', 'cup_down', 'chest_drink' + e);
+        else if (step === 'mid') pose = P3('arms_drinkmid', 'cup_down', 'mid_drink' + e);
         else { pose = P3('arms_drink', 'cup_down', 'held_drink' + e); fx.push({ kind: 'gulp', at: 'mouth' }); }
         break;
       }
       case 'rum': {
-        const e = t > 4800 ? '_empty' : '';
-        if (revealing) pose = P3(...LIFT, 'table_rum' + e);
-        else if (t < 2500 || t >= 4800) pose = P3('arms_rest', 'cup_down', 'table_rum' + e);
-        else { pose = P3('arms_drink', 'cup_down', 'held_rum'); fx.push({ kind: 'gulp', at: 'mouth' }); }
+        const step = seq(t, [[2300, 'table'], [2650, 'mid'], [4400, 'sip'], [4750, 'mid'], [1e12, 'done']]);
+        if (revealing) pose = P3(...LIFT, 'table_rum' + (t > 4400 ? '_empty' : ''));
+        else if (step === 'table') pose = P3('arms_rest', 'cup_down', 'table_rum');
+        else if (step === 'mid') pose = P3('arms_drinkmid', 'cup_down', 'mid_rum');
+        else if (step === 'sip') { pose = P3('arms_drink', 'cup_down', 'held_rum'); fx.push({ kind: 'gulp', at: 'mouth' }); }
+        else pose = P3('arms_rest', 'cup_down', 'table_rum_empty');
         break;
       }
       case 'smokes': {
-        const z = burnt(f), c = t % 9000;
-        if (revealing) { pose = P3(...LIFT, 'lips_cigarette_' + z); fx.push({ kind: 'wisp', at: 'lips_cigarette_' + z }); }
-        else if (c >= 5500 && c < 7300) {           // taking a drag: the tip glows
-          pose = P3('arms_smoke', 'cup_down', 'held_cigarette_' + z);
-          fx.push({ kind: 'glow', at: 'held_cigarette_' + z });
-        } else {
+        const z = burnt(f);
+        if (revealing) { pose = P3(...LIFT, 'lips_cigarette_' + z); fx.push({ kind: 'wisp', at: 'lips_cigarette_' + z }); break; }
+        const step = seq(t % 9000, [[5200, 'down'], [5550, 'up'], [7250, 'drag'], [7600, 'up'], [9000, 'exhale']]);
+        if (step === 'drag') { pose = P3('arms_smoke', 'cup_down', 'held_cigarette_' + z); fx.push({ kind: 'glow', at: 'held_cigarette_' + z }); }
+        else if (step === 'up') { pose = P3('arms_smokemid', 'cup_down', 'mid_cigarette_' + z); fx.push({ kind: 'wisp', at: 'mid_cigarette_' + z }); }
+        else {
           pose = P3('arms_smokedown', 'cup_down', 'hand_cigarette_' + z);
           fx.push({ kind: 'wisp', at: 'hand_cigarette_' + z });
-          if (c >= 7300) fx.push({ kind: 'exhale', at: 'mouth' });
+          if (step === 'exhale') fx.push({ kind: 'exhale', at: 'mouth' });
         }
         break;
       }
@@ -1075,11 +1090,17 @@
       }
       case 'steak': {
         const plate = 'plate_' + (f < 0.35 ? 'full' : f < 0.8 ? 'half' : 'bone');
+        if (revealing) { pose = P3(...LIFT, plate); break; }
         const c = t % 8000;
-        if (revealing) pose = P3(...LIFT, plate);
-        else if (f >= 0.9 || c < 3000) pose = P3('arms_cut', 'cup_side', plate, 'cut_tools');
-        else if (c < 4500) pose = P3('arms_eat', 'cup_side', plate, 'held_fork');
-        else { pose = P3('arms_cut', 'cup_side', plate, 'cut_tools'); chew = true; }
+        const saw = Math.floor(c / 380) % 2 ? ['arms_cut2', 'cut_tools2'] : ['arms_cut', 'cut_tools'];   // knife sawing back and forth
+        if (f >= 0.9) pose = P3('arms_cut', 'cup_side', plate, 'cut_tools');
+        else {
+          const step = seq(c, [[3000, 'cut'], [3300, 'mid'], [4500, 'bite'], [4800, 'mid'], [8000, 'chew']]);
+          if (step === 'cut') pose = P3(saw[0], 'cup_side', plate, saw[1]);
+          else if (step === 'mid') pose = P3('arms_bitemid', 'cup_side', plate, 'mid_fork');
+          else if (step === 'bite') pose = P3('arms_eat', 'cup_side', plate, 'held_fork');
+          else { pose = P3('arms_cut', 'cup_side', plate, 'cut_tools'); chew = true; }
+        }
         break;
       }
       case 'pipe': {                              // 👑 the captain's churchwarden pipe
@@ -1094,9 +1115,43 @@
         }
         break;
       }
-      default: pose = revealing ? 'lift' : 'rest';
+      default: pose = revealing ? P3(...LIFT) : 'rest';
     }
     return { key: pose + '|' + fx.map(x => x.kind).join() + (chew ? '|chew' : ''), pose, fx, chew };
+  }
+  /** Every frame an item's loop can show, so they can be drawn ahead of time (no stutter mid-animation). */
+  function itemFramePoses(id) {
+    const out = [];
+    const S = ['L', 'M', 'S'];
+    if (id === 'drink') for (const e of ['', '_empty']) out.push(P3('arms_rest', 'cup_down', 'table_drink' + e), P3('arms_holddrink', 'cup_down', 'chest_drink' + e), P3('arms_drinkmid', 'cup_down', 'mid_drink' + e), P3('arms_drink', 'cup_down', 'held_drink' + e));
+    if (id === 'rum') out.push(P3('arms_rest', 'cup_down', 'table_rum'), P3('arms_drinkmid', 'cup_down', 'mid_rum'), P3('arms_drink', 'cup_down', 'held_rum'), P3('arms_rest', 'cup_down', 'table_rum_empty'));
+    if (id === 'smokes') out.push(...S.slice(0, 1).flatMap(z => [P3('arms_smokedown', 'cup_down', 'hand_cigarette_' + z), P3('arms_smokemid', 'cup_down', 'mid_cigarette_' + z), P3('arms_smoke', 'cup_down', 'held_cigarette_' + z)]));
+    if (id === 'cigar') out.push(P3('arms_rest', 'cup_down', 'teeth_cigar_L'), P3('arms_cigarhand', 'cup_down', 'hand_cigar_L'));
+    if (id === 'steak') out.push(P3('arms_cut', 'cup_side', 'plate_full', 'cut_tools'), P3('arms_cut2', 'cup_side', 'plate_full', 'cut_tools2'), P3('arms_bitemid', 'cup_side', 'plate_full', 'mid_fork'), P3('arms_eat', 'cup_side', 'plate_full', 'held_fork'));
+    if (id === 'pipe') out.push(P3('arms_rest', 'cup_down', 'teeth_pipe'), P3('arms_cigarhand', 'cup_down', 'hand_pipe'));
+    return out;
+  }
+  // draw portraits in the background, a few at a time, so the first time a frame shows it is already ready
+  const warmQueue = [];
+  let warmBusy = false;
+  const idle = cb => window.requestIdleCallback ? window.requestIdleCallback(cb, { timeout: 250 }) : setTimeout(cb, 16);
+  function warm(look, poses) {
+    if (!(window.Avatar3D && window.Avatar3D.ready)) return;
+    poses.forEach(pose => warmQueue.push([look, pose]));
+    if (warmBusy) return;
+    warmBusy = true;
+    const step = () => {
+      const job = warmQueue.shift();
+      if (!job) { warmBusy = false; return; }
+      try { window.Avatar3D.portrait(Avatar.sanitize(job[0]), job[1]); } catch (_) {}
+      idle(step);
+    };
+    idle(step);
+  }
+  function warmTable() {
+    if (!G.s) return;
+    G.s.players.forEach(p => warm(p.avatar, ['rest', P3('arms_rest', 'cup_shake1'), P3('arms_rest', 'cup_shake2'),
+      P3('arms_liftmid', 'cup_liftmid', 'dice_table'), P3('arms_lift', 'cup_lift', 'dice_table')]));
   }
   function seatPortraitHTML(p, fr) {
     const A = window.Avatar3D;
@@ -1114,21 +1169,34 @@
     }
     return Avatar.render(p.avatar, seatPx(), fr.pose) + fxHTML;
   }
-  /** Called from tick(): moves each seat on to the next frame of whatever it's eating, drinking or smoking. */
+  /** Runs ~11×/s: moves each seat to its next frame, cross-fading so motion looks smooth. */
   function animateSeats() {
     if (!G.s || current !== 'game') return;
     const now = Date.now();
-    for (const i of Object.keys(G.uses).map(Number)) {
-      const p = G.s.players[i]; if (!p) continue;
+    G.s.players.forEach((p, i) => {
       const fr = seatFrame(i, now);
-      if (fr.key === G.seatFrameKey[i]) continue;
-      G.seatFrameKey[i] = fr.key;
+      if (fr.key === G.seatFrameKey[i]) return;
       const av = document.querySelector(`.seat .av[data-seat="${i}"]`);
-      if (!av) continue;
+      if (!av) return;
+      const oldImg = av.querySelector('img.avatar-table');
+      // smoke effects are only rebuilt when they change, so the puffs keep drifting smoothly
+      const sameFx = (G.seatFxKey || {})[i] === fr.fx.map(x => x.kind + x.at).join();
+      G.seatFrameKey[i] = fr.key;
+      (G.seatFxKey = G.seatFxKey || {})[i] = fr.fx.map(x => x.kind + x.at).join();
       av.classList.toggle('chewing', !!fr.chew);
+      const oldFx = sameFx ? [...av.querySelectorAll('.smoke, .ember-glow, .exhale, .sip')] : [];
       av.innerHTML = seatPortraitHTML(p, fr);
-    }
+      if (sameFx && oldFx.length) { av.querySelectorAll('.smoke, .ember-glow, .exhale, .sip').forEach(e => e.remove()); oldFx.forEach(e => av.appendChild(e)); }
+      const newImg = av.querySelector('img.avatar-table');
+      if (oldImg && newImg) {                       // cross-fade from the old frame to the new one
+        oldImg.classList.add('prev-frame');
+        av.insertBefore(oldImg, newImg);
+        newImg.classList.add('fade-in');
+        setTimeout(() => oldImg.remove(), 200);
+      }
+    });
   }
+  setInterval(animateSeats, 90);
 
   const THINK = ['Hmm…', "Countin' me dice…", 'Studyin\' yer faces…', 'Workin\' the odds…', 'Smells like a bluff…', 'Lemme think…', 'Thinkin\' it over…'];
   function thinkLine(i) {
@@ -1307,7 +1375,6 @@
 
   function tick() {
     const now = Date.now();
-    animateSeats();
     const tl = document.querySelector('.s-bubble.think .tl');
     if (tl && G.s && G.s.phase === 'bidding') tl.textContent = thinkLine(G.s.turn);
     const c = $('#rv-count'); if (c && G.nextAt) c.textContent = Math.max(0, Math.ceil((G.nextAt - now) / 1000));

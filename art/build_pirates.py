@@ -1369,6 +1369,40 @@ build('prop_pipe', PROPS, place(mk_pipe(), (-0.25, 0, 0.12), (0.25, 0, 0.35), 1.
 build('teeth_pipe', ADMIN, place(mk_pipe(), MOUTH + Vector((0.06, -0.01, -0.01)), (0, 0, math.radians(-40)), 1.0))
 build('hand_pipe', ADMIN, place(mk_pipe(at_bowl=True), (0.4, -1.03, 0.79), (0, math.radians(-10), math.radians(150)), 1.0))
 
+# --------------------------------------------------------------------------- in-between frames
+# Extra poses half-way between the main ones, so movements glide instead of jumping:
+# lifting the cup, raising a drink / smoke / fork, sawing with the knife, and shaking the dice cup.
+MID = bpy.data.collections.new('inbetween'); ROOT.children.link(MID)
+# cup lifted half-way at the reveal (leather and gold)
+mid_cup_at = CUP.lerp(lift_at, 0.5) + Vector((0, 0, 0.02))
+mid_cup_rot = (math.radians(-17), math.radians(12), 0)
+build('cup_liftmid', MID, place(mk_cup(), mid_cup_at, mid_cup_rot))
+build('cupgold_liftmid', MID, place(mk_cup_gold(), mid_cup_at, mid_cup_rot))
+build('arms_liftmid', MID, L_FLAT() + arm(1, (0.84, -0.52, 0.36), (0.36, -0.99, 0.58), (-0.95, -0.15, 0.06)))
+# cup rattling between the hands at the start of a round
+for k, tilt in ((1, 0.17), (2, -0.17)):
+    at = CUP + Vector((0.0, 0.0, 0.07))
+    build('cup_shake%d' % k, MID, place(mk_cup(), at, (0.05 * k, tilt, 0)))
+    build('cupgold_shake%d' % k, MID, place(mk_cup_gold(), at, (0.05 * k, tilt, 0)))
+# drink raised half-way
+build('arms_drinkmid', MID, L_REST() + arm(1, (0.86, -0.47, 0.38), (0.42, -0.84, 0.86), (-0.65, -0.42, 0.32)))
+build('mid_drink', MID, place(mk_tankard(), (0.24, -0.93, 0.74), (0, math.radians(-20), math.radians(-6)), 0.85))
+build('mid_drink_empty', MID, place(mk_tankard(False), (0.24, -0.93, 0.74), (0, math.radians(-24), math.radians(-6)), 0.85))
+build('mid_rum', MID, place(mk_shot(), (0.22, -0.9, 0.84), (0, math.radians(-18), 0), 0.9))
+# cigarette on its way up to the lips
+build('arms_smokemid', MID, L_REST() + arm(1, (0.88, -0.47, 0.36), (0.46, -0.86, 0.68), (-0.55, -0.6, 0.32), 'pinch'))
+for tag, left in SIZES:
+    build('mid_cigarette_' + tag, MID, point_along(mk_cigarette(left), (0.36, -1.0, 0.75), (0.6, -0.72, 0.32)))
+# fork half-way to the mouth
+build('arms_bitemid', MID, L_FLAT() + arm(1, (0.86, -0.46, 0.38), (0.33, -0.87, 0.72), (-0.6, -0.4, 0.36)))
+build('mid_fork', MID, place(mk_fork(), (0.3, -0.93, 0.76), (0, math.radians(-14), math.radians(150)), 0.9))
+# knife sawing back: hand and knife pulled back a little
+SAW = Vector((0.045, -0.03, 0.055))
+build('arms_cut2', MID, arm(-1, (-0.82, -0.5, 0.32), (-0.26, -0.98, 0.42), (0.35, -0.75, -0.4)) +
+      arm(1, (0.84, -0.5, 0.34), Vector((0.32, -0.98, 0.42)) + SAW, (-0.35, -0.75, -0.4)))
+build('cut_tools2', MID, point_along(mk_fork(False), (-0.2, -1.1, 0.42), (0.35, 0.15, -0.9))
+      + point_along(mk_knife(), Vector((0.26, -1.1, 0.42)) + SAW, (-0.5, 0.05, -0.75)))
+
 # --------------------------------------------------------------------------- export
 for ob in ROOT.all_objects:
     ob.select_set(True)

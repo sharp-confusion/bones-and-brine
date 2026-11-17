@@ -647,3 +647,16 @@ body.mobile .g-bottom { padding-left: max(.7rem, env(safe-area-inset-left)); pad
 .q-time { font-variant-numeric: tabular-nums; opacity: .7; margin: 0; }
 .quick-btn { background: linear-gradient(#ffd96a, #e09a1c) !important; }
 .desk-pane[hidden] { display: none !important; }
+
+/* ---------- smoother, livelier pirates ---------- */
+/* each pirate breathes gently while sitting (seats are out of step with each other) */
+.seat .av img.avatar-table { position: relative; z-index: 1; transform-origin: 50% 100%;
+  animation: breathe 4.2s ease-in-out infinite; animation-delay: var(--breath, 0s); will-change: transform; }
+@keyframes breathe { 0%, 100% { transform: scale(1, 1); } 45% { transform: scale(1.006, 1.013) translateY(-0.6px); } }
+/* new frames fade in over the previous one, so poses blend instead of popping */
+.seat .av img.avatar-table.fade-in { animation: frameIn .17s ease-out both, breathe 4.2s ease-in-out infinite; animation-delay: 0s, var(--breath, 0s); }
+@keyframes frameIn { from { opacity: 0; } to { opacity: 1; } }
+.seat .av img.prev-frame { position: absolute; left: 0; top: 0; z-index: 0; animation: none; }
+.seat .av .smoke, .seat .av .ember-glow, .seat .av .exhale, .seat .av .sip { z-index: 2; }
+.av.chewing img.avatar-table { animation: chew .45s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .seat .av img.avatar-table { animation: none !important; } }
