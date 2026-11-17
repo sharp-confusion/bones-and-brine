@@ -745,3 +745,7 @@ body.no-chat [data-chat], body.no-chat #g-chat-btn, body.no-chat .chat-bubble { 
 .tavern-looks .btn { white-space: normal; }
 /* table portraits got bigger: let the seat grow with them */
 .seat { width: max-content; min-width: 84px; max-width: 176px; }
+/* CrazyGames: guest-only (their rules forbid outside sign-in), so hide everything that needs our accounts */
+body.on-crazy #account-bar, body.on-crazy [data-go="board"], body.on-crazy [data-go="account"],
+body.on-crazy #gm-report, body.on-crazy .cl-rep, body.on-crazy [data-lrep], body.on-crazy .privacy-note .linkish + span { display: none !important; }
+body.on-crazy .menu-buttons [data-go="shop"] { grid-column: 1 / -1; }

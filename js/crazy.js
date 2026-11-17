@@ -10,7 +10,7 @@
   function applySettings() {
     const st = (sdk && sdk.game && sdk.game.settings) || {};
     settingsMuted = !!st.muteAudio; applyMute();
-    document.body.classList.toggle('no-chat', !!st.disableChat);
+    document.body.classList.add('no-chat');   // always off here: chat needs our accounts, and players on CrazyGames are guests (st.disableChat is honoured either way)
   }
 
   /** Midgame ad at a natural break (end of a game). The SDK enforces the ~3 minute cooldown itself. */

@@ -51,7 +51,7 @@
   const ON_CRAZY = window.BNB_PLATFORM === 'crazygames';
   /** Tell the host portal (js/crazy.js in the CrazyGames build) what's happening; does nothing elsewhere. */
   const hook = (name, ...args) => { try { const f = (window.BNB_HOOKS || {})[name]; return f ? f(...args) : undefined; } catch (e) { console.warn('hook', name, e); } };
-  if (ON_CRAZY) document.body.classList.add('on-crazy');
+  if (ON_CRAZY) document.body.classList.add('on-crazy', 'no-chat');   // guest-only there, so no chat (chat needs an account)
   if (ON_CRAZY && /[?&]disableChat=true\b/.test(location.search)) document.body.classList.add('no-chat');
   // Recent activity, shown to the admin in the Desk's Online tab (kept in memory only, never stored).
   const ActLog = [];
@@ -2529,7 +2529,7 @@
   liveStart();                                   // "who's online" for the admin Desk
   // accounts: restore a saved sign-in, otherwise offer the sign-in screen (once; guests can carry on)
   renderAccountBar();
-  if (Auth.enabled) {
+  if (Auth.enabled && !ON_CRAZY) {               // on CrazyGames players are guests: no outside sign-in (their rule)
     Auth.restore().then(me => {
       if (me && me.banned) {
         Auth.signOut(); toast('This account has been banned.', 5000); renderAccountBar();
