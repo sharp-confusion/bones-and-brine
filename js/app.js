@@ -1107,6 +1107,9 @@
   const lastBidBy = (s, i) => { for (let k = s.history.length - 1; k >= 0; k--) if (s.history[k].by === i) return s.history[k]; return null; };
   function renderSeats() {
     const s = G.s, tbl = $('#g-table'); if (!s) return;
+    // keep each seat's portrait (and smoke) node: rebuilding it would reload the picture and make it blink
+    const keep = {};
+    $$('.seat .av[data-seat]', tbl).forEach(av => { keep[av.dataset.seat] = { img: av.querySelector('img.avatar-table:not(.prev-frame)'), fx: [...av.querySelectorAll('.smoke, .ember-glow, .exhale, .sip')] }; });
     $$('.seat', tbl).forEach(e => e.remove());
     const n = s.players.length, W = tbl.clientWidth || 1, H = tbl.clientHeight || 1;
     const portrait = H > W * 1.05;
@@ -1121,7 +1124,7 @@
       const isTurn = s.phase === 'bidding' && s.turn === i;
       const isMe = G.mode === 'local' ? i === G.viewer : i === G.me;
       el.className = 'seat' + (isTurn ? ' turn' : '') + (p.out ? ' out' : '') + (isMe ? ' me' : '') + (y < 42 ? ' upper' : '');
-      el.style.left = x + '%'; el.style.top = y + '%'; el.style.setProperty('--breath', '-' + (i * 0.73).toFixed(2) + 's');
+      el.style.left = x + '%'; el.style.top = y + '%'; el.style.setProperty('--breath', '-' + ((now / 1000 + i * 0.73) % 4.2).toFixed(2) + 's');   // phase follows the clock, so a redraw doesn't restart the breath
       let bubble = '';
       const t = G.taunts[i];
       const cb = (G.chatBubbles || {})[i];
@@ -1137,6 +1140,14 @@
       const fr = seatFrame(i, now);
       G.seatFrameKey[i] = fr.key;
       el.innerHTML = `${bubble}<div class="av ${fr.chew ? 'chewing' : ''}" data-seat="${i}">${seatPortraitHTML(p, fr)}</div><div class="s-name">${looksBot(p) ? '<span class="bot-tag">🤖</span>' : ''}${nm(i)}</div><div class="s-cups">${cups}</div>${xrayHTML(i, p)}`;
+      const old = keep[i], ni = el.querySelector('img.avatar-table');
+      if (old && old.img && ni && old.img.getAttribute('src') === ni.getAttribute('src')) {
+        ni.replaceWith(old.img); old.img.classList.remove('fade-in');
+        if (old.fx.length && (G.seatFxKey || {})[i] === fr.fx.map(x => x.kind + x.at).join()) {
+          el.querySelectorAll('.av .smoke, .av .ember-glow, .av .exhale, .av .sip').forEach(e => e.remove());
+          old.fx.forEach(e => el.querySelector('.av').appendChild(e));
+        }
+      }
       tbl.appendChild(el);
     });
   }
@@ -1147,7 +1158,7 @@
   }
   function seatPx() {
     const t = $('#g-table'), w = t.clientWidth || 800, h = t.clientHeight || 500;
-    return Math.round(Math.max(70, Math.min(124, Math.min(w, h * 1.3) / 5.4)));
+    return Math.round(Math.max(82, Math.min(150, Math.min(w, h * 1.3) / 4.6)));
   }
   // --- item animations: each use is a loop of 3D poses that lasts until the item is finished ---------
   const P3 = (...parts) => 'parts:table,' + parts.join(',');
@@ -1316,17 +1327,31 @@
       const sameFx = (G.seatFxKey || {})[i] === fr.fx.map(x => x.kind + x.at).join();
       G.seatFrameKey[i] = fr.key;
       (G.seatFxKey = G.seatFxKey || {})[i] = fr.fx.map(x => x.kind + x.at).join();
-      av.classList.toggle('chewing', !!fr.chew);
-      const oldFx = sameFx ? [...av.querySelectorAll('.smoke, .ember-glow, .exhale, .sip')] : [];
-      av.innerHTML = seatPortraitHTML(p, fr);
-      if (sameFx && oldFx.length) { av.querySelectorAll('.smoke, .ember-glow, .exhale, .sip').forEach(e => e.remove()); oldFx.forEach(e => av.appendChild(e)); }
-      const newImg = av.querySelector('img.avatar-table');
-      if (oldImg && newImg) {                       // cross-fade from the old frame to the new one
-        oldImg.classList.add('prev-frame');
-        av.insertBefore(oldImg, newImg);
-        newImg.classList.add('fade-in');
-        setTimeout(() => oldImg.remove(), 200);
-      }
+      // build the next pose off-screen and only swap it in once the picture is decoded (no blank flash)
+      const tmp = document.createElement('div');
+      tmp.innerHTML = seatPortraitHTML(p, fr);
+      const newImg = tmp.querySelector('img.avatar-table');
+      const FX = '.smoke, .ember-glow, .exhale, .sip';
+      const swap = () => {
+        if (G.seatFrameKey[i] !== fr.key || !av.isConnected) return;     // a newer pose or a full redraw got there first
+        av.classList.toggle('chewing', !!fr.chew);
+        av.querySelectorAll('img.prev-frame').forEach(e => e.remove());
+        const cur = av.querySelector('img.avatar-table');
+        [...av.children].forEach(n => { if (n !== cur && !(sameFx && n.matches(FX))) n.remove(); });
+        [...tmp.children].forEach(n => { if (n !== newImg && !(sameFx && n.matches(FX))) av.appendChild(n); });
+        if (!newImg) return;
+        newImg.style.setProperty('--breath', '-' + ((Date.now() / 1000 + i * 0.73) % 4.2).toFixed(2) + 's');   // same breath phase as the pose it replaces
+        if (cur) {                                    // cross-fade from the old pose to the new one
+          cur.classList.remove('fade-in'); cur.classList.add('prev-frame');
+          av.insertBefore(newImg, cur.nextSibling);
+          // (no fade-in on the new pose: the old one fades out above it)
+          setTimeout(() => cur.remove(), 240);
+        } else av.insertBefore(newImg, av.firstChild);
+      };
+      if (newImg && newImg.decode && !newImg.complete) {
+        // wait for the picture to decode, but never more than 150 ms (some browsers stall decode() in the background)
+        Promise.race([newImg.decode().catch(() => {}), new Promise(r => setTimeout(r, 150))]).then(swap);
+      } else swap();
     });
   }
   setInterval(animateSeats, 90);

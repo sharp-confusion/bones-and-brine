@@ -654,10 +654,10 @@ body.mobile .g-bottom { padding-left: max(.7rem, env(safe-area-inset-left)); pad
   animation: breathe 4.2s ease-in-out infinite; animation-delay: var(--breath, 0s); will-change: transform; }
 @keyframes breathe { 0%, 100% { transform: scale(1, 1); } 45% { transform: scale(1.006, 1.013) translateY(-0.6px); } }
 /* new frames fade in over the previous one, so poses blend instead of popping */
-.seat .av img.avatar-table.fade-in { animation: frameIn .17s ease-out both, breathe 4.2s ease-in-out infinite; animation-delay: 0s, var(--breath, 0s); }
-@keyframes frameIn { from { opacity: 0; } to { opacity: 1; } }
-.seat .av img.prev-frame { position: absolute; left: 0; top: 0; z-index: 0; animation: none; }
-.seat .av .smoke, .seat .av .ember-glow, .seat .av .exhale, .seat .av .sip { z-index: 2; }
+/* (new poses are always fully visible underneath; the old pose fades away on top, so nothing ever blinks) */
+@keyframes frameOut { from { opacity: 1; } to { opacity: 0; } }
+.seat .av img.prev-frame { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; animation: frameOut .22s ease-in forwards, breathe 4.2s ease-in-out infinite; animation-delay: 0s, var(--breath, 0s); }
+.seat .av .smoke, .seat .av .ember-glow, .seat .av .exhale, .seat .av .sip { z-index: 3; }
 .av.chewing img.avatar-table { animation: chew .45s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .seat .av img.avatar-table { animation: none !important; } }
 
@@ -743,3 +743,5 @@ body.no-chat [data-chat], body.no-chat #g-chat-btn, body.no-chat .chat-bubble { 
 .kit-card .badge.price { background: var(--gold); color: #2a1a06; top: auto; bottom: -8px; }
 .tavern-looks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .6rem; margin: .4rem 0 .8rem; }
 .tavern-looks .btn { white-space: normal; }
+/* table portraits got bigger: let the seat grow with them */
+.seat { width: max-content; min-width: 84px; max-width: 176px; }

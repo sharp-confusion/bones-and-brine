@@ -853,26 +853,26 @@ p.finish(COS)
 # --- shop cosmetics (paid in the Locker) ---
 M.update(Ink=mat('Ink', '#24406e', 0.6), Thread=mat('Thread', '#1a1412', 0.7))
 p = Part('cos_nosering')
-p.add(torus(surf(0.06, 1.4, 0.04), 0.035, 0.009, (math.pi / 2, 0, 0.4), seg=20, ring=6), M['Trim'])
+p.add(torus(surf(0.07, 1.39, 0.05), 0.062, 0.017, (math.pi / 2, 0, 0.4), seg=24, ring=8), M['Trim'])
 p.finish(COS)
 p = Part('cos_anchor')          # little anchor tattoo on the left cheek
-ax, az = -0.32, 1.44
+ax, az = -0.3, 1.45
 r = face_rot(ax, az)
-p.add(box(surf(ax, az, 0.004), (0.012, 0.012, 0.13), r), M['Ink'], smooth=False)
-p.add(box(surf(ax, az + 0.045, 0.004), (0.07, 0.012, 0.012), r), M['Ink'], smooth=False)
-p.add(torus(surf(ax, az + 0.075, 0.004), 0.014, 0.005, (math.pi / 2, 0, r[2]), seg=12, ring=5), M['Ink'])
-p.add(torus(surf(ax, az - 0.03, 0.004), 0.045, 0.006, (math.pi / 2, 0, r[2]), seg=16, ring=5, arc=math.pi), M['Ink'])
+p.add(box(surf(ax, az, 0.006), (0.026, 0.016, 0.24), r), M['Ink'], smooth=False)
+p.add(box(surf(ax, az + 0.08, 0.006), (0.13, 0.016, 0.026), r), M['Ink'], smooth=False)
+p.add(torus(surf(ax, az + 0.14, 0.006), 0.026, 0.009, (math.pi / 2, 0, r[2]), seg=14, ring=6), M['Ink'])
+p.add(torus(surf(ax, az - 0.06, 0.006), 0.085, 0.012, (math.pi / 2, 0, r[2]), seg=18, ring=6, arc=math.pi), M['Ink'])
 p.finish(COS)
 p = Part('cos_sideburns')
 for sx in (-1, 1):
-    p.add(lumpy(sphere(surf(sx * 0.5, 1.5, 0.02), 0.09, (0.6, 0.8, 1.7), face_rot(sx * 0.5, 1.5)), 0.015, 9, surf(sx * 0.5, 1.5), 4 + sx), M['Hair'])
+    p.add(lumpy(sphere(surf(sx * 0.44, 1.4, 0.02), 0.1, (0.45, 0.7, 2.1), face_rot(sx * 0.44, 1.4)), 0.02, 9, surf(sx * 0.44, 1.4), 4 + sx), M['Hair'])
 p.finish(COS)
 p = Part('cos_stitches')       # a sewn-up cut across the nose
-a, b = surf(-0.24, 1.6, 0.012), surf(0.12, 1.5, 0.012)
-p.add(aim(None, a, b, 0.018, 0.018, 8), M['Scar'])
+a, b = surf(-0.3, 1.47, 0.014), surf(0.2, 1.4, 0.014)
+p.add(aim(None, a, b, 0.032, 0.032, 8), M['Scar'])
 for t in (0.12, 0.3, 0.5, 0.7, 0.88):
     c = a.lerp(b, t) + Vector((0, -0.015, 0))
-    p.add(box(c, (0.012, 0.012, 0.09), (0, 0.25, 0)), M['Thread'], smooth=False)
+    p.add(box(c, (0.022, 0.02, 0.14), (0, 0.25, 0)), M['Thread'], smooth=False)
 p.finish(COS)
 
 # --------------------------------------------------------------------------- consumables, table, arms & poses
@@ -1603,6 +1603,8 @@ if PREVIEW:
                          ['base_deckhand', 'hair_slick', 'top_furcloak', 'cos_sideburns', 'table', 'arms_rest', 'cupkraken_down'],
                          ['base_oldsalt', 'hair_crop', 'top_quartermaster', 'cos_stitches', 'table', 'arms_rest', 'cupcoconut_down']],
           4, dx=3.4, dz=3.3, turn=math.radians(-14), px=300, tilt=80)
+    sheet('sheet_faces', [['base_deckhand', 'hair_crop', 'top_captain', c] for c in ('cos_nosering', 'cos_anchor', 'cos_sideburns', 'cos_stitches')],
+          4, turn=math.radians(-12), px=320)
     if os.environ.get('BNB_ONLY_SHOP'):
         raise SystemExit(0)
     ADM = ['base_davyjones', 'hat_admiral', 'top_admiral', 'trinket_macaw']
