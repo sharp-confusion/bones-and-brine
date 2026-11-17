@@ -49,6 +49,8 @@
   // There: no share/invite links (they'd point at the wrong site), no service worker, and chat follows
   // the portal's "disable chat" setting.
   const ON_CRAZY = window.BNB_PLATFORM === 'crazygames';
+  /** Tell the host portal (js/crazy.js in the CrazyGames build) what's happening; does nothing elsewhere. */
+  const hook = (name, ...args) => { try { const f = (window.BNB_HOOKS || {})[name]; return f ? f(...args) : undefined; } catch (e) { console.warn('hook', name, e); } };
   if (ON_CRAZY) document.body.classList.add('on-crazy');
   if (ON_CRAZY && /[?&]disableChat=true\b/.test(location.search)) document.body.classList.add('no-chat');
   // Recent activity, shown to the admin in the Desk's Online tab (kept in memory only, never stored).
@@ -70,14 +72,14 @@
       return ctx;
     }
     function tone(f, d, type = 'sine', vol = 0.12, when = 0) {
-      const c = on && ac(); if (!c) return;
+      const c = on && !window.BNB_MUTED && ac(); if (!c) return;
       const o = c.createOscillator(), gn = c.createGain(), t = c.currentTime + when;
       o.type = type; o.frequency.value = f;
       gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + d);
       o.connect(gn).connect(c.destination); o.start(t); o.stop(t + d + 0.03);
     }
     function rattle() {
-      const c = on && ac(); if (!c) return;
+      const c = on && !window.BNB_MUTED && ac(); if (!c) return;
       const len = Math.floor(c.sampleRate * 0.03);
       for (let i = 0; i < 11; i++) {
         const buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
@@ -155,6 +157,7 @@
     current = name;
     if (onShow[name]) onShow[name]();
     window.scrollTo(0, 0);
+    hook('screen', name);
     try { logAct('→ ' + (WHERE[name] || name)); } catch (_) {}   // the admin's "who's online" shows where we are
   }
   document.addEventListener('click', e => {
@@ -510,6 +513,7 @@
     $('#lobby-wait').classList.toggle('hidden', host);
     renderChat();
     $('#lobby-rules').innerHTML = rulesHTML(Online.rules, host);
+    hook('lobby', host && !Online.started && Online.seats.length < MAX_SEATS ? Online.code : null);
   }
   onShow.lobby = renderLobby;
   $('#lobby-rules').onchange = e => {
@@ -546,7 +550,7 @@
   });
   $('#lobby-leave').addEventListener('click', () => { leaveOnline(); go('online'); });
   $('#copy-link').addEventListener('click', async () => {
-    const url = location.origin + location.pathname + '?room=' + Online.code;
+    const url = hook('inviteUrl', Online.code) || location.origin + location.pathname + '?room=' + Online.code;
     const text = `Join me for Bones & Brine liar's dice! Room code ${Online.code}`;
     try {
       if (navigator.share && document.body.classList.contains('mobile')) { await navigator.share({ title: 'Bones & Brine', text, url }); return; }
@@ -875,6 +879,7 @@
       const kind = G.mode === 'local' ? (quick ? 'a Quick Game (offline)' : 'Pass & Play') : quick ? 'a Quick Game' : 'an online game';
       logAct(`Started ${kind} with ${s.players.length} pirates`);
     }
+    if (prev && prev.phase !== 'over' && s.phase === 'over') hook('gameover', isYou(s.winner));
     if (prev && prev.phase !== 'over' && s.phase === 'over' && !G.watching) logAct(isYou(s.winner) ? 'Won the game! 🏆' : `Game over: ${s.players[s.winner] ? s.players[s.winner].name : '?'} won`);
     if (!prev || s.round !== prev.round) { Sfx.rattle(); G.rollAnim = true; G.roundAt = Date.now(); setTimeout(warmTable, SHAKE_MS + 150); }
     else if (s.history.length > prev.hist && s.phase === 'bidding') Sfx.bid();
@@ -2438,29 +2443,6 @@
   ['#privacy-close', '#privacy-ok'].forEach(s => $(s).addEventListener('click', () => showPrivacy(false)));
   $('#privacy-overlay').addEventListener('click', e => { if (e.target.id === 'privacy-overlay') showPrivacy(false); });
 
-  // Impressum (§ 5 DDG), filled from js/config.js; hidden until name, address and email are set
-  (function impressum() {
-    const im = (window.BNB_CONFIG || {}).impressum || {};
-    const name = String(im.name || '').trim(), addr = String(im.address || '').trim(), mail = String(im.email || '').trim(), phone = String(im.phone || '').trim();
-    if (!(name && addr && mail)) return;
-    const lines = s => esc(s).replace(/\n/g, '<br>');
-    $('#imprint-body').innerHTML = `
-      <h3>Angaben gemäß § 5 DDG</h3>
-      <p>${esc(name)}<br>${lines(addr)}</p>
-      <h3>Kontakt</h3>
-      <p>E-Mail: <a href="mailto:${esc(mail)}">${esc(mail)}</a>${phone ? `<br>Telefon: ${esc(phone)}` : ''}</p>
-      <h3>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h3>
-      <p>${esc(name)}<br>${lines(addr)}</p>
-      <h3>Hinweis</h3>
-      <p>Bones &amp; Brine ist ein kostenloses, privates Hobbyprojekt ohne Werbung. Für Inhalte, die Spieler im Chat schreiben, sind die Spieler selbst verantwortlich. Rechtswidrige Nachrichten werden nach Kenntnis entfernt.</p>
-      <p class="hint">Legal notice: ${esc(name)}, ${esc(addr.replace(/\n/g, ', '))}. Contact: ${esc(mail)}.</p>`;
-    $('.imprint-link').classList.remove('hidden');
-    $('#privacy-contact').innerHTML = `Questions about your data, or want your account deleted? Email <a href="mailto:${esc(mail)}">${esc(mail)}</a> or tell the admin in a game, and it will be taken care of.`;
-    const show = on => $('#imprint-overlay').classList.toggle('hidden', !on);
-    $('#imprint-btn').addEventListener('click', () => { Sfx.click(); show(true); });
-    ['#imprint-close', '#imprint-ok'].forEach(s => $(s).addEventListener('click', () => show(false)));
-    $('#imprint-overlay').addEventListener('click', e => { if (e.target.id === 'imprint-overlay') show(false); });
-  })();
 
   // ---------- boot ----------
   window.addEventListener('avatar3d-ready', () => {
@@ -2492,5 +2474,7 @@
   }
 
   // exposed for debugging in the console
-  window.BonesAndBrine = { G, Online, showUse, act, coins: () => profile.coins };
+  window.BonesAndBrine = { G, Online, showUse, act, coins: () => profile.coins,
+    joinRoom: code => { if (Online.role || G.s) return; go('online'); $('#join-code').value = String(code).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); doJoin(); },
+    quickGame: () => { if (!Online.role && !G.s) startQuick(); } };
 })();

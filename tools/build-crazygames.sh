@@ -8,6 +8,8 @@ rm -rf "$out" "$zip"; mkdir -p "$out/models"
 cp -r index.html css js icons icon.svg "$out/"
 cp models/pirates.js "$out/models/"            # the embedded model; the .glb isn't needed
 printf "/* CrazyGames build */\nwindow.BNB_PLATFORM = 'crazygames';\n" > "$out/js/platform.js"
+# CrazyGames SDK + bridge, loaded before the game scripts
+sed -i 's|<script src="js/platform.js"></script>|<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>\n<script src="js/platform.js"></script>\n<script src="js/crazy.js"></script>|' "$out/index.html"
 # no install-as-app on the portal
 sed -i '/rel="manifest"/d' "$out/index.html"
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/zip-forward.ps1 -Src "$out" -Dest "$zip"
