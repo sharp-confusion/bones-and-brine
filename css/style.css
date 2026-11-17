@@ -749,3 +749,9 @@ body.no-chat [data-chat], body.no-chat #g-chat-btn, body.no-chat .chat-bubble { 
 body.on-crazy #account-bar, body.on-crazy [data-go="board"], body.on-crazy [data-go="account"],
 body.on-crazy #gm-report, body.on-crazy .cl-rep, body.on-crazy [data-lrep], body.on-crazy .privacy-note .linkish + span { display: none !important; }
 body.on-crazy .menu-buttons [data-go="shop"] { grid-column: 1 / -1; }
+/* in-game yes/no box (replaces browser pop-ups, which game portals block) */
+.ask-overlay { z-index: 80; }
+.ask-sheet { width: min(380px, 92vw); text-align: center; display: flex; flex-direction: column; gap: 1rem; }
+.ask-sheet p { margin: 0; font-size: 1.15rem; font-weight: 800; }
+.ask-btns { display: flex; gap: .6rem; justify-content: center; }
+.ask-btns .btn { flex: 1; }

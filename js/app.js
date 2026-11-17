@@ -53,6 +53,24 @@
   const hook = (name, ...args) => { try { const f = (window.BNB_HOOKS || {})[name]; return f ? f(...args) : undefined; } catch (e) { console.warn('hook', name, e); } };
   if (ON_CRAZY) document.body.classList.add('on-crazy', 'no-chat');   // guest-only there, so no chat (chat needs an account)
   if (ON_CRAZY && /[?&]disableChat=true\b/.test(location.search)) document.body.classList.add('no-chat');
+  /** Yes/no question in the game's own style. Browser pop-ups (confirm) are blocked inside game portals like
+   *  CrazyGames, where they silently answer "no", so the game never relies on them. Resolves true/false. */
+  function ask(msg, yes = 'Yes', no = 'Cancel') {
+    return new Promise(resolve => {
+      const o = document.createElement('div');
+      o.className = 'overlay ask-overlay';
+      o.innerHTML = `<div class="sheet ask-sheet" role="alertdialog" aria-modal="true"><p></p><div class="ask-btns"><button class="btn" data-a="0"></button><button class="btn primary" data-a="1"></button></div></div>`;
+      o.querySelector('p').textContent = msg;
+      o.querySelector('[data-a="0"]').textContent = no;
+      o.querySelector('[data-a="1"]').textContent = yes;
+      const done = v => { o.remove(); document.removeEventListener('keydown', key); resolve(v); };
+      const key = e => { if (e.key === 'Escape') done(false); if (e.key === 'Enter') done(true); };
+      o.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) done(b.dataset.a === '1'); else if (e.target === o) done(false); });
+      document.addEventListener('keydown', key);
+      document.body.appendChild(o);
+      o.querySelector('[data-a="1"]').focus();
+    });
+  }
   // Recent activity, shown to the admin in the Desk's Online tab (kept in memory only, never stored).
   const ActLog = [];
   function logAct(text) {
@@ -323,9 +341,9 @@
     const i = customKits.findIndex(k => k.id === draftSource); if (i < 0) return;
     customKits[i] = { ...Dice.sanitize(draft), id: draftSource, custom: true }; saveKits(); toast('Changes saved'); renderForge(false); renderMenuProfile();
   });
-  $('#f-delete').addEventListener('click', () => {
+  $('#f-delete').addEventListener('click', async () => {
     const i = customKits.findIndex(k => k.id === draftSource); if (i < 0) return;
-    if (!confirm(`Scrap "${customKits[i].name}" for good?`)) return;
+    if (!(await ask(`Scrap "${customKits[i].name}" for good?`, 'Scrap it', 'Keep'))) return;
     customKits.splice(i, 1); saveKits();
     if (profile.kitId === draftSource) { profile.kitId = 'bone'; saveProfile(); }
     openInForge(kitById(profile.kitId));
@@ -1556,9 +1574,9 @@
     $('#g-menu').setAttribute('aria-expanded', String(open));
   });
   document.addEventListener('click', e => { if (!e.target.closest('#game-menu, #g-menu')) closeGameMenu(); });
-  $('#g-leave').addEventListener('click', () => {
+  $('#g-leave').addEventListener('click', async () => {
     closeGameMenu();
-    if (G.s && G.s.phase !== 'over' && !confirm('Abandon ship and return to port?')) return;
+    if (G.s && G.s.phase !== 'over' && !(await ask('Abandon ship and return to port?', 'Abandon ship', 'Stay'))) return;
     quitGame();
   });
   $('#gm-log').addEventListener('click', () => { closeGameMenu(); $('#g-log-btn').click(); });
