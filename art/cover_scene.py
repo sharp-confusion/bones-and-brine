@@ -115,19 +115,22 @@ def render_covers(outdir):
         point((x, 3.4, 3.4), 420, (1.0, 0.66, 0.32), 0.3)
 
     # the throne, with the admin's Davy Jones on it (raised at the back)
-    TX, TY, TZ0 = RC.x, RC.y + RP + 0.1, -0.35            # the throne stands at the head of the round table
-    boxo((TX, TY + 0.15, TZ0 / 2 - 0.2), (2.4, 1.6, TZ0 + 0.4), plank)                         # dais
-    boxo((TX, TY + 0.15, TZ0 + 0.02), (2.5, 1.7, 0.06), gold)
-    boxo((TX, TY + 0.05, TZ0 + 0.18), (1.8, 1.25, 0.3), velvet)                       # seat cushion
-    boxo((TX, TY + 0.75, TZ0 + 1.7), (2.0, 0.25, 3.3), M['Wood']); boxo((TX, TY + 0.6, TZ0 + 1.55), (1.6, 0.08, 2.6), velvet)
+    DJ_UP, DJ_SCALE = 0.75, 1.4                            # the admin sits bigger and higher than everyone else
+    TX, TY, TZ0 = RC.x, RC.y + RP + 0.45, -0.35 + DJ_UP   # the throne stands at the head of the round table
+    boxo((TX, TY + 0.15, TZ0 / 2 - 0.2), (3.2, 2.0, TZ0 + 0.4), plank)                         # dais
+    boxo((TX, TY + 0.15, TZ0 + 0.02), (3.3, 2.1, 0.06), gold)
+    boxo((TX, TY + 0.05, TZ0 + 0.18), (2.5, 1.5, 0.3), velvet)                       # seat cushion
+    boxo((TX, TY + 0.85, TZ0 + 2.1), (2.8, 0.25, 4.1), M['Wood']); boxo((TX, TY + 0.7, TZ0 + 1.95), (2.3, 0.08, 3.3), velvet)
     for sx in (-1, 1):
-        boxo((TX + sx * 1.0, TY + 0.6, TZ0 + 1.9), (0.12, 0.3, 3.6), gold)
-        boxo((TX + sx * 1.05, TY - 0.05, TZ0 + 0.75), (0.25, 1.3, 0.18), M['Wood'])   # armrests
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.13, location=(TX + sx * 1.05, TY - 0.7, TZ0 + 0.8)); own(bpy.context.object).data.materials.append(gold)
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.16, location=(TX + sx * 1.0, TY + 0.6, TZ0 + 3.8)); own(bpy.context.object).data.materials.append(gold)
-    bpy.ops.mesh.primitive_cone_add(radius1=0.35, depth=0.5, location=(TX, TY + 0.6, TZ0 + 3.6)); own(bpy.context.object).data.materials.append(gold)
-    pirate(['base_davyjones', 'hat_admiral', 'top_admiral', 'trinket_macaw', 'teeth_pipe', 'arms_rest', 'cupgold_down'], *seat_at(0),
-           {'Skin': '#5d8f7c', 'Cloth': '#1b2a52', 'Sleeve': '#1b2a52', 'Hat': '#1b2a52'}, scale=1.08)
+        boxo((TX + sx * 1.4, TY + 0.7, TZ0 + 2.25), (0.14, 0.32, 4.4), gold)
+        boxo((TX + sx * 1.45, TY - 0.05, TZ0 + 0.85), (0.28, 1.5, 0.2), M['Wood'])   # armrests
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.13, location=(TX + sx * 1.45, TY - 0.8, TZ0 + 0.9)); own(bpy.context.object).data.materials.append(gold)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.16, location=(TX + sx * 1.4, TY + 0.7, TZ0 + 4.55)); own(bpy.context.object).data.materials.append(gold)
+    bpy.ops.mesh.primitive_cone_add(radius1=0.45, depth=0.6, location=(TX, TY + 0.85, TZ0 + 4.4)); own(bpy.context.object).data.materials.append(gold)
+    DJ_AT = (RC.x, RC.y + RP + 0.35, DJ_UP)
+    pirate(['cupgold_down'], *seat_at(0))                                            # his golden cup stays on the table
+    pirate(['base_davyjones', 'hat_admiral', 'top_admiral', 'trinket_macaw', 'teeth_pipe'], DJ_AT, 0,
+           {'Skin': '#5d8f7c', 'Cloth': '#1b2a52', 'Sleeve': '#1b2a52', 'Hat': '#1b2a52'}, scale=DJ_SCALE)
     point((TX, TY - 1.6, TZ0 + 3.2), 260, (0.55, 0.85, 0.8), 0.6)                     # eerie sea-green glow on the captain
 
     # four pirates at the table
@@ -140,6 +143,40 @@ def render_covers(outdir):
            per_part={'hat_bandana': {'White': '#151515'}}, scale=0.8)
     pirate(['base_skeleton', 'hat_tricorn', 'top_rags', 'trinket_earring', 'arms_smoke', 'held_cigarette_M', 'cupbone_down'],
            *seat_at(74), {'Skin': '#f1ead6', 'Cloth': '#3b2a1a', 'Sleeve': '#3b2a1a', 'Hat': '#7a1f1f'})
+    # lower bodies and chairs (the game's pirates are modelled chest-up; the covers show the whole pirate seated)
+    FLOOR = TOP - 2.2
+    chairwood = mat('ChairWood', '#5a3519', 0.8)
+    def limb(p0, p1, r, mat_):
+        p0, p1 = Vector(p0), Vector(p1); d = p1 - p0
+        bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=d.length, location=(p0 + p1) / 2, vertices=20); o = own(bpy.context.object)
+        o.rotation_euler = d.to_track_quat('Z', 'Y').to_euler(); o.data.materials.append(mat_); bpy.ops.object.shade_smooth()
+        return o
+    def seated(at, turn, pants, chair=True, hip=0.62):
+        Mw = Matrix.Translation(Vector(at)) @ Matrix.Rotation(turn, 4, 'Z')
+        L = lambda x, y, z: Mw @ Vector((x, y, z))
+        pm = mat('Pants_' + pants, pants, 0.85)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=L(0, 0.02, -0.22), segments=28, ring_count=14); h = own(bpy.context.object)
+        h.scale = (hip, hip * 0.9, 0.42); h.rotation_euler = (0, 0, turn); h.data.materials.append(pm); bpy.ops.object.shade_smooth()   # hips
+        for sx in (-1, 1):
+            knee, ankle = L(sx * 0.28, -0.95, -0.4), L(sx * 0.3, -1.05, FLOOR - at[2] + 0.12)
+            limb(L(sx * 0.28, -0.05, -0.38), knee, 0.21, pm)                         # thigh
+            limb(knee, ankle, 0.16, pm)                                               # shin
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=L(sx * 0.3, -1.18, FLOOR - at[2] + 0.1)); b = own(bpy.context.object)
+            b.scale = (0.17, 0.3, 0.12); b.rotation_euler = (0, 0, turn); b.data.materials.append(M['Leather']); bpy.ops.object.shade_smooth()   # boot
+        if not chair:
+            return
+        st = -0.62                                                                    # seat top (local z)
+        o = boxo(L(0, 0.05, st - 0.06), (1.35, 1.2, 0.12), chairwood); o.rotation_euler = (0, 0, turn)
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                lz0, lz1 = st - 0.12, FLOOR - at[2]
+                o = boxo(L(sx * 0.58, 0.05 + sy * 0.5, (lz0 + lz1) / 2), (0.1, 0.1, lz0 - lz1), chairwood); o.rotation_euler = (0, 0, turn)
+            o = boxo(L(sx * 0.58, 0.62, 0.35), (0.1, 0.1, 1.9), chairwood); o.rotation_euler = (0, 0, turn)       # back posts
+        for z in (0.55, 1.15):
+            o = boxo(L(0, 0.62, z), (1.25, 0.08, 0.16), chairwood); o.rotation_euler = (0, 0, turn)               # back rails
+
+    seated(*seat_at(-74), '#3a3f2a'); seated(*seat_at(-38), '#e8e1d0'); seated(*seat_at(38), '#5a4a32', hip=0.55); seated(*seat_at(74), '#2a2320')
+    # (Davy Jones sits straight on the throne cushion: legs would poke out over the table from up there)
     for (x, y, h) in ((RC.x, RC.y + 0.2, 0.5), (RC.x - 1.3, RC.y - 1.6, 0.3), (RC.x + 1.45, RC.y - 1.5, 0.4)):
         candle(x, y, h)
     for (x, y, rz) in ((RC.x - 0.5, RC.y - 0.9, 0.3), (RC.x + 0.45, RC.y - 1.15, 1.1), (RC.x + 0.1, RC.y - 2.0, 0.6), (RC.x - 1.2, RC.y - 0.4, 0.9), (RC.x + 1.3, RC.y - 0.5, 0.2), (RC.x - 0.3, RC.y - 2.2, 0.7)):
@@ -157,8 +194,9 @@ def render_covers(outdir):
         boxo((CX + k * 1.05, 4.32, 2.5), (0.06, 0.08, 7), plank)
     pirate(['base_deckhand', 'hair_wild', 'hat_tricorn', 'top_captain', 'cos_mustache', 'cos_goldtooth', 'trinket_parrot', 'arms_lift', 'cup_lift'],
            (CX, 0.2, 0), 0, {'Cloth': '#8c2323', 'Sleeve': '#8c2323', 'Hair': '#4a2c16', 'Hat': '#2b1d14'})
+    seated((CX, 0.2, 0), 0, '#2a2320')                                # the close-up's captain, on his chair
     cup = Vector((CX + 0.2, -0.82, 0.78))                                             # where the lifted cup's mouth is
-    for k, t in enumerate((0.18, 0.36, 0.55, 0.74, 0.92)):                          # dice tumbling out in an arc toward the camera
+    for k, t in enumerate((0.3, 0.58, 0.85)):                                       # 3 dice tumbling out toward the camera (5 in all: one cup)
         p = cup.lerp(Vector((CX - 0.25 + 0.18 * k - 0.4, -2.35, TOP + 0.09)), t)
         p.z += math.sin(t * math.pi) * 0.35
         die(tuple(p), (k * 0.9 + 0.3, k * 1.3, k * 0.7), 0.13 + 0.02 * k)
