@@ -8,6 +8,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Bones &amp; Brine — Pirate Liar's Dice</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bones &amp; Brine">
+<meta property="og:title" content="Bones &amp; Brine — Pirate Liar's Dice">
+<meta property="og:description" content="Bluff, wager and call Liar! at a pirate tavern table. Free in your browser: play friends online, Quick Game or bots. No download.">
+<meta property="og:url" content="https://sharp-confusion.github.io/bones-and-brine/">
+<meta property="og:image" content="https://sharp-confusion.github.io/bones-and-brine/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Pirates around a tavern table playing liar's dice">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bones &amp; Brine — Pirate Liar's Dice">
+<meta name="twitter:description" content="Bluff, wager and call Liar! Free pirate liar's dice in your browser.">
+<meta name="twitter:image" content="https://sharp-confusion.github.io/bones-and-brine/og.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -31,6 +44,7 @@
     <p class="tagline">A pirate's game of liar's dice</p>
     <button class="profile-chip" id="menu-profile" data-go="locker" aria-label="Edit yer pirate"></button>
     <div class="account-bar" id="account-bar"></div>
+    <button class="daily-chest hidden" id="daily-chest"><span class="dc-icon">🧰</span><span class="dc-text"><b>Daily chest</b><small id="daily-sub">Claim yer free doubloons</small></span><span class="dc-go">Open</span></button>
     <nav class="menu-buttons">
       <button class="btn big admin-btn hidden" id="admin-desk-btn">👑 Admin Desk</button>
       <button class="btn big primary quick-btn" id="quick-btn">⚡ Quick Game</button>
@@ -39,7 +53,8 @@
       <button class="btn big" data-go="locker">🎩 Captain's Locker</button>
       <button class="btn big" data-go="forge">🎲 Dice Forge</button>
       <button class="btn big" data-go="shop">🍺 The Tavern (shop)</button>
-      <button class="btn big ghost" data-go="rules">📜 How to Play</button>
+      <button class="btn big" data-go="board">🏆 Leaderboard</button>
+      <div class="menu-row"><button class="btn big ghost" data-go="rules">📜 How to Play</button><button class="btn big ghost" id="share-btn">📣 Share</button></div>
     </nav>
     <div class="menu-foot">
       <label>Controls
@@ -168,6 +183,17 @@
     <div class="shop-wallet">Yer purse: <b>🪙 <span id="shop-coins">0</span></b> doubloons</div>
     <p class="hint">Earn 1 doubloon for every die ye make another pirate lose. Spend them here, then enjoy yer goods at the table with the 🍺 button — everyone sees ye indulge.</p>
     <div class="shop-grid" id="shop-grid"></div>
+  </div>
+</section>
+
+<!-- ============ LEADERBOARD ============ -->
+<section id="screen-board" class="screen">
+  <header class="scr-head"><button class="btn small" data-go="menu">← Back</button><h2>🏆 Leaderboard</h2></header>
+  <div class="panel board">
+    <p class="hint">Most dice won: every die ye make another pirate lose counts.</p>
+    <div class="tabs board-tabs"><button class="tab on" data-period="week">This week</button><button class="tab" data-period="all">All time</button></div>
+    <div id="board-me" class="board-me"></div>
+    <ol id="board-list" class="board-list"></ol>
   </div>
 </section>
 
@@ -352,8 +378,13 @@
   <div class="sheet desk-sheet">
     <div class="desk-head"><h2>👑 Admin Desk</h2><button class="icon-btn desk-close" id="desk-close" aria-label="Close">✕</button></div>
     <div class="tabs desk-tabs" role="tablist">
+      <button class="tab" data-dtab="online" role="tab">🟢 Online <span class="count-pill live" id="desk-online-count">0</span></button>
       <button class="tab on" data-dtab="pirates" role="tab">🔎 Pirates</button>
       <button class="tab" data-dtab="reports" role="tab">📥 Reports <span class="count-pill hidden" id="desk-report-count">0</span></button>
+    </div>
+    <div class="desk-pane" id="desk-pane-online" hidden>
+      <div class="online-sum" id="online-sum"></div>
+      <div id="online-list" class="online-list"></div>
     </div>
     <div class="desk-pane" id="desk-pane-reports" hidden>
       <div class="row tight"><select id="rep-filter"><option value="open">Open</option><option value="reviewed">Reviewed</option><option value="dismissed">Dismissed</option><option value="all">All</option></select>

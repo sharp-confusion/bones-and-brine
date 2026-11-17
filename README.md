@@ -32,6 +32,18 @@ Sign-in with a username and password, cloud saves, and the admin are powered by 
 
 6. Run `supabase/02_chat_and_reports.sql` in the SQL Editor too. It adds chat timeouts, reports and the admin inbox.
 
+7. Run `supabase/03_daily_and_leaderboard.sql` too. It adds the daily chest, the leaderboard and the Admin Desk's live gifts, kicks and bans.
+
+**Daily chest, leaderboard and sharing:**
+- **🧰 Daily chest** on the main menu: day 1–7 of a streak pays 1, 1, 2, 2, 3, 3 and 5 doubloons. Miss a day and the streak starts over. Guests get it too (saved on their device).
+- **🏆 Leaderboard**: most dice won (dice ye made other pirates lose), this week and all time. Signed-in players only.
+- **📣 Share** on the main menu and **Brag** after a game. Links show a preview picture (`og.png`) in Discord, WhatsApp, Reddit and so on.
+- **Quick Game crewmates**: when the queue is quiet, the table fills with bots that look and play like real people (gamer-tag names, uneven think times, the odd "gg"). Only the admin sees them marked 🤖.
+
+**Admin Desk → 🟢 Online** shows everyone who has the game open right now (guests too), where they are and for how long. Signed-in players can be gifted, managed, kicked to the menu or banned on the spot.
+
+**Connection relay (TURN):** players on strict school, work or mobile networks sometimes can't connect to each other directly. Make a free account at https://www.metered.ca/stun-turn, create an app, and put its name and API key into `turnApp` / `turnKey` in `js/config.js`.
+
 **Quick Game, chat and moderation:**
 - **⚡ Quick Game** puts you in a queue (Supabase Realtime). With 4 players, or 2+ who've waited a few seconds, the longest-waiting player hosts and the rest join automatically. Empty seats get bots. After 20 s alone you can play with bots instead.
 - **Chat** in online lobbies and at the table (💬). Guests can read it; signed-in players can talk. Messages are filtered for English and German swearing and slurs, including leetspeak, stretched letters and spaced-out words.

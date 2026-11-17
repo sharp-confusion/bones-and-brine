@@ -120,8 +120,11 @@ const Auth = (() => {
     reportCount: () => rpc('admin_report_count', {}),
     resolve: (id, status) => rpc('admin_resolve_report', { p_id: id, p_status: status }),
     chatRecord: u => rpc('admin_chat_record', { p_username: cleanUser(u) }),
-    clearStrikes: u => rpc('admin_clear_strikes', { p_username: cleanUser(u) })
+    clearStrikes: u => rpc('admin_clear_strikes', { p_username: cleanUser(u) }),
+    notify: (u, cmd, payload) => rpc('admin_notify', { p_username: cleanUser(u), p_cmd: cmd, p_payload: payload || {} })
   };
+  /** Collect (and clear) messages the admin left for me. */
+  const takeMessages = () => (enabled && me) ? rpc('take_admin_messages', {}).then(r => r || []) : Promise.resolve([]);
 
   // --- chat moderation & reports (all checked on the server) ---
   /** Tell the server my message was censored; returns { strikes, muted_until }. */
@@ -131,8 +134,24 @@ const Auth = (() => {
   const submitReport = (reported, reason, details, evidence) =>
     rpc('submit_report', { p_reported: String(reported).slice(0, 40), p_reason: reason, p_details: String(details || '').slice(0, 600), p_evidence: evidence || [] });
 
+  // --- daily chest & leaderboard (supabase/03_daily_and_leaderboard.sql) ---
+  /** Has today's (UTC) chest not been opened yet? */
+  const dailyReady = () => !!me && me.last_daily !== new Date().toISOString().slice(0, 10);
+  async function claimDaily() {
+    clearTimeout(saveTimer); await flush();         // our own pending coin save must land first
+    const r = await rpc('claim_daily', {});
+    if (me && r) { me.coins = r.coins; me.daily_streak = r.streak; me.last_daily = new Date().toISOString().slice(0, 10); }
+    return r;
+  }
+  async function recordDiceWon() {
+    if (!enabled || !me) return null;
+    try { const r = await rpc('record_dice_won', {}); if (r && me) Object.assign(me, r); return r; } catch (e) { console.warn('dice stat', e); return null; }
+  }
+  const leaderboard = period => rpc('leaderboard', { p_period: period === 'week' ? 'week' : 'all' });
+
   return {
     enabled, restore, signIn, signUp, signOut, save, flush, token, verify, admin, recordStrike, chatStatus, submitReport,
+    dailyReady, claimDaily, recordDiceWon, leaderboard, takeMessages,
     get client() { return sb; },
     get me() { return me; },
     get isAdmin() { return !!(me && me.is_admin); },

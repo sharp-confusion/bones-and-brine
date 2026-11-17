@@ -39,6 +39,32 @@ const Net = (() => {
   }
   window.addEventListener('pagehide', () => { try { if (hostConn && hostConn.open) hostConn.send({ t: 'bye' }); } catch (_) {} });
 
+  // --- how browsers find a path to each other ---------------------------------------------------
+  // STUN lets most players connect directly. Behind strict NATs (schools, offices, some mobile
+  // carriers) a direct path is impossible, so a TURN relay passes the game traffic along instead.
+  const STUN = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
+  let ice = STUN.slice(), iceAt = 0, iceLoading = null;
+  function loadRelay() {
+    const cfg = window.BNB_CONFIG || {};
+    if (!cfg.turnApp || !cfg.turnKey || typeof fetch !== 'function') return Promise.resolve(ice);
+    if (iceLoading) return iceLoading;
+    if (Date.now() - iceAt < 30 * 60000 && ice.length > STUN.length) return Promise.resolve(ice);
+    const url = `https://${encodeURIComponent(cfg.turnApp)}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(cfg.turnKey)}`;
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const t = setTimeout(() => ctrl && ctrl.abort(), 4000);           // never hold a game up waiting for the relay
+    iceLoading = fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(r => r.ok ? r.json() : [])
+      .then(list => { if (Array.isArray(list) && list.length) { ice = STUN.concat(list); iceAt = Date.now(); } return ice; })
+      .catch(() => ice)
+      .finally(() => { clearTimeout(t); iceLoading = null; });
+    return iceLoading;
+  }
+  loadRelay();
+  const peerOpts = () => ({ debug: 0, config: { iceServers: ice } });
+  const hasRelay = () => ice.length > STUN.length;
+
   const on = (ev, fn) => { h[ev] = fn; };
   const available = () => typeof window.Peer === 'function';
   const makeCode = () => Array.from({ length: 5 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join('');
@@ -57,7 +83,7 @@ const Net = (() => {
     close();
     if (!available()) return onError({ message: 'Online library failed to load (are ye offline?)' });
     const code = makeCode();
-    const p = new Peer(PREFIX + code, { debug: 0 });
+    const p = new Peer(PREFIX + code, peerOpts());
     peer = p;
     p.on('open', () => { startHostBeat(); onReady(code); });
     p.on('connection', conn => {
@@ -84,7 +110,7 @@ const Net = (() => {
   function join(code, onOpen, onError) {
     close();
     if (!available()) return onError({ message: 'Online library failed to load (are ye offline?)' });
-    const p = new Peer({ debug: 0 });
+    const p = new Peer(peerOpts());
     peer = p;
     let opened = false;
     const timer = setTimeout(() => { if (!opened && peer === p) onError({ type: 'peer-unavailable' }); }, 15000);
@@ -115,5 +141,5 @@ const Net = (() => {
     if (p) { try { p.destroy(); } catch (_) {} }
   }
 
-  return { on, available, host, join, send, sendTo, broadcast, drop, close, describe };
+  return { on, available, host, join, send, sendTo, broadcast, drop, close, describe, loadRelay, hasRelay };
 })();

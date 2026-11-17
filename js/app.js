@@ -140,6 +140,7 @@
     current = name;
     if (onShow[name]) onShow[name]();
     window.scrollTo(0, 0);
+    try { liveTrack(); } catch (_) {}            // tell the admin's "who's online" where we are
   }
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-go]');
@@ -151,7 +152,7 @@
     const k = kitById(profile.kitId);
     $('#menu-profile').innerHTML = `${Avatar.render(profile.avatar, 64)}<span><b>${esc(profile.name)}</b><small>${[6, 1].map(f => Dice.render(f, k, 18)).join('')} ${esc(k.name)}</small><small class="coins">🪙 ${profile.coins} doubloons · tap to edit</small></span>`;
   }
-  onShow.menu = renderMenuProfile;
+  onShow.menu = () => { renderMenuProfile(); renderDaily(); };
   $('#controls-mode').addEventListener('change', e => { Device.mode = e.target.value; store.set('bnb.controls', Device.mode); applyControlsMode(); });
 
   // ---------- captain's locker ----------
@@ -342,6 +343,34 @@
   const localRules = { ...savedRules };
   const seatNames = list => list.map(x => x.name);
   const makeBot = list => ({ type: 'bot', name: randomName(seatNames(list)), avatar: Avatar.random(), kit: Dice.randomPreset(), persona: Bot.randomPersona() });
+  // Quick Game crewmates: bots that pass for real players. Gamer-tag names, signed-in or guest, no 🤖 tag,
+  // human think times and the odd chat line. Only the admin can see they're bots.
+  const TAG_A = ['salty', 'kraken', 'rum', 'jolly', 'barnacle', 'dread', 'gold', 'sea', 'storm', 'black', 'grog', 'parrot', 'cutlass', 'anchor',
+    'bilge', 'crimson', 'squid', 'tide', 'wreck', 'plank', 'skull', 'reef', 'gull', 'shady', 'lucky', 'sneaky', 'captain', 'old', 'mad', 'dice'];
+  const TAG_B = ['dog', 'jack', 'beard', 'legs', 'queen', 'hook', 'runner', 'pete', 'maggie', 'fox', 'lord', 'lad', 'lass', 'eye', 'bones',
+    'monkey', 'king', 'wolf', 'rat', 'sam', 'shark', 'bandit', 'goblin', 'liar', 'roller', 'sailor'];
+  const TAG_PLAIN = ['luca', 'finn', 'emma', 'noah', 'paul', 'mia', 'leon', 'ben', 'tim', 'jonas', 'lena', 'max', 'nico', 'sophie', 'elias',
+    'jake', 'ryan', 'liam', 'chloe', 'tyler', 'kevin', 'marco', 'nina', 'tom', 'alex', 'sara', 'jan', 'felix', 'olli', 'kai'];
+  function gamerTag() {
+    const r = Math.random(), num = () => pick([String(Math.floor(Math.random() * 99) + 1), String(2006 + Math.floor(Math.random() * 8)), String(Math.floor(Math.random() * 900) + 100), 'x', '']);
+    let t;
+    if (r < 0.4) t = pick(TAG_A) + pick(['', '_']) + pick(TAG_B) + num();
+    else if (r < 0.75) t = pick(TAG_PLAIN) + pick(['_', '', '_']) + pick([num(), pick(TAG_B), pick(['hd', 'yt', 'ttv', 'gg', 'lol', 'xd', 'pro', 'dk'])]);
+    else t = pick(['the', 'xx', 'im', 'its', 'not', 'mr', 'ms', 'captain']) + pick(['', '_']) + pick(TAG_B.concat(TAG_PLAIN)) + num();
+    t = t.replace(/[^a-z0-9_]/g, '').slice(0, 16);
+    return t.length >= 3 ? t : t + '_' + Math.floor(Math.random() * 90 + 10);
+  }
+  function makeCrewmate(list) {
+    const taken = seatNames(list);
+    const signedIn = Math.random() < 0.72;
+    let name;
+    do { name = signedIn ? gamerTag() : randomName(taken); } while (taken.includes(name));
+    const persona = pick(['balanced', 'balanced', 'cautious', 'reckless', 'sly'].filter(k => Bot.PERSONAS[k]).concat(Bot.randomPersona()));
+    return { id: 'p-' + Math.random().toString(36).slice(2, 10), name, avatar: Avatar.stripAdmin(Avatar.random()), kit: Dice.randomPreset(),
+      account: signedIn ? name : null, bot: { persona, disguise: true, chatty: signedIn ? Math.random() : 0, speed: 0.75 + Math.random() * 0.6 } };
+  }
+  /** Does this seat show up as a bot to me? Disguised crewmates only look like bots to the admin. */
+  const looksBot = p => !!(p && p.bot && !(p.bot.disguise && !Auth.isAdmin));
   const makeHuman = list => ({ type: 'human', name: randomName(seatNames(list)), avatar: Avatar.random(), kit: { ...Dice.PRESETS[(list.length + 2) % Dice.PRESETS.length] } });
   function personaSelect(val, attr) {
     return `<select ${attr} aria-label="Bot style">${Object.entries(Bot.PERSONAS).map(([k, p]) => `<option value="${k}" ${k === val ? 'selected' : ''}>${p.label}</option>`).join('')}</select>`;
@@ -396,7 +425,8 @@
   const setStatus = m => { $('#online-status').textContent = m; };
   const myProfilePayload = () => ({ name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId) });
   // `account` = the server-verified username (null for guests); `admin` = verified admin
-  const publicSeat = x => ({ id: x.id, name: x.name, avatar: x.avatar, kit: x.kit, bot: x.bot, account: x.account || null, admin: !!x.admin });
+  // disguised Quick Game crewmates go out as ordinary players; only an admin's game is told they're bots
+  const publicSeat = (x, admin) => ({ id: x.id, name: x.name, avatar: x.avatar, kit: x.kit, bot: x.bot && (!x.bot.disguise || admin) ? { persona: x.bot.persona } : null, account: x.account || null, admin: !!x.admin });
   function sanitizeSeat(x) {
     return { id: String(x && x.id || '').slice(0, 80), name: cleanName(x && x.name), avatar: Avatar.sanitize(x && x.avatar),
       kit: Dice.sanitize(x && x.kit) || Dice.PRESETS[0], bot: x && x.bot ? { persona: Bot.PERSONAS[x.bot.persona] ? x.bot.persona : 'balanced' } : null,
@@ -439,7 +469,7 @@
   $('#join-code').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
 
   function hostLobbyBroadcast() {
-    Net.broadcast({ t: 'lobby', code: Online.code, seats: Online.seats.map(publicSeat), rules: Online.rules });
+    Online.seats.forEach(r => { if (!r.bot && r.id !== 'host') Net.sendTo(r.id, { t: 'lobby', code: Online.code, seats: Online.seats.map(x => publicSeat(x, r.admin)), rules: Online.rules }); });
     if (current === 'lobby') renderLobby();
   }
   function renderLobby() {
@@ -449,11 +479,11 @@
     $('#lobby-seats').innerHTML = Online.seats.map((x, i) => {
       const isMe = host ? x.id === 'host' : (x.id === Online.myId);
       return `<div class="seat-row">${Avatar.render(x.avatar, 48)}
-        <div class="sr-main"><span class="sr-name">${x.bot ? '🤖 ' : ''}${esc(x.name)}</span>
-          ${x.bot ? (host ? personaSelect(x.bot.persona, `data-lpersona="${i}"`) : `<span class="tag bot">${esc(Bot.PERSONAS[x.bot.persona].label)}</span>`)
+        <div class="sr-main"><span class="sr-name">${looksBot(x) ? '🤖 ' : ''}${esc(x.name)}</span>
+          ${looksBot(x) ? (host ? personaSelect(x.bot.persona, `data-lpersona="${i}"`) : `<span class="tag bot">${esc(Bot.PERSONAS[x.bot.persona].label)}</span>`)
             : `<span class="tag ${isMe ? 'you' : ''}">${x.id === 'host' ? 'Captain' : 'Crew'}${isMe ? ' · You' : ''}${x.admin ? ' · 👑 Admin' : x.account ? ' · ✔ Account' : ' · Guest'}</span>`}
         </div>
-        <span class="sr-btns">${Dice.render(6, x.kit, 32)}${!x.bot && x.id !== (host ? 'host' : Online.myId) ? `<button class="x-btn" data-lrep="${esc(x.id)}" title="Report this pirate" aria-label="Report">⚑</button>` : ''}${(host ? x.id !== myId : (Auth.isAdmin && x.id !== 'host' && x.id !== Online.myId)) ? `<button class="x-btn" data-kick="${esc(x.id)}" title="${x.bot ? 'Remove bot' : 'Make them walk the plank'}">✕</button>` : ''}</span>
+        <span class="sr-btns">${Dice.render(6, x.kit, 32)}${!looksBot(x) && x.id !== (host ? 'host' : Online.myId) ? `<button class="x-btn" data-lrep="${esc(x.id)}" title="Report this pirate" aria-label="Report">⚑</button>` : ''}${(host ? x.id !== myId : (Auth.isAdmin && x.id !== 'host' && x.id !== Online.myId)) ? `<button class="x-btn" data-kick="${esc(x.id)}" title="${looksBot(x) ? 'Remove bot' : 'Make them walk the plank'}">✕</button>` : ''}</span>
       </div>`;
     }).join('') + (Online.seats.length < MAX_SEATS ? `<p class="hint">${MAX_SEATS - Online.seats.length} seat(s) free — share the code, or add bots.</p>` : '');
     $('#lobby-host-ctrls').classList.toggle('hidden', !host);
@@ -605,7 +635,7 @@
 
   function resetGame(mode) {
     clearTimers();
-    Object.assign(G, { mode, s: null, me: -1, viewer: -1, bottom: 0, revealedFor: -1, localHumans: [], snap: null, schedKey: '', nextAt: 0, turnDeadline: 0, taunts: {}, uses: {}, seatFrameKey: {}, revealKey: '' });
+    Object.assign(G, { mode, s: null, me: -1, viewer: -1, bottom: 0, revealedFor: -1, localHumans: [], snap: null, schedKey: '', nextAt: 0, turnDeadline: 0, taunts: {}, uses: {}, seatFrameKey: {}, revealKey: '', myDiceWon: 0, botChat: {} });
     $('#taunt-tray').classList.add('hidden');
   }
   function startLocal(players, rules) {
@@ -621,6 +651,7 @@
     G.s = Engine.create(players, rules);
     G.me = G.s.players.findIndex(p => p.id === 'host'); G.viewer = G.bottom = G.me;
     go('game'); update();
+    crewSeats().forEach(x => crewMaybe(x, 'start', 0.3, 1500 + Math.random() * 4000));
   }
   function receive(view, you, turnLeft) {
     if (G.mode !== 'client') resetGame('client');
@@ -732,6 +763,16 @@
       const p = Bot.odds(s, s.turn, s.bid);
       if (p > 0.3 && p < 0.65) ms += pace.think[0] * 0.5;     // a tough call — mull it over
     }
+    const me = s.players[s.turn].bot;
+    if (me && me.disguise) {
+      // people are uneven: quick snap wagers, slow stares, the odd glance at their phone
+      ms *= me.speed || 1;
+      const r = Math.random();
+      if (r < 0.18) ms *= 0.45;
+      else if (r > 0.9) ms += 4000 + Math.random() * 7000;
+      if (!s.bid) ms *= 0.8;                                    // opening a round is easy
+      ms = Math.min(ms, TURN_MS - 8000);
+    }
     return Math.round(ms);
   }
   function nextRound() {
@@ -744,7 +785,9 @@
       if (p.bot || p.id === 'host') return;
       const seat = Online.seats.find(x => x.id === p.id);
       const xray = !!(seat && seat.admin && seat.xray);       // verified admin with X-ray on sees every cup
-      Net.sendTo(p.id, { t: 'state', s: xray ? JSON.parse(JSON.stringify(s)) : Engine.viewFor(s, i), you: i, turnLeft: left, xray });
+      const v = xray ? JSON.parse(JSON.stringify(s)) : Engine.viewFor(s, i);
+      v.players.forEach(q => { if (q.bot) q.bot = q.bot.disguise && !(seat && seat.admin) ? null : { persona: q.bot.persona }; });
+      Net.sendTo(p.id, { t: 'state', s: v, you: i, turnLeft: left, xray });
     });
   }
 
@@ -778,6 +821,7 @@
       coinPop(r.earner);
       if (r.earner === walletSeat()) {
         profile.coins += 1; saveProfile();
+        G.myDiceWon = (G.myDiceWon | 0) + 1; Auth.recordDiceWon();       // counts for the leaderboard
         setTimeout(() => { Sfx.coin(); toast(`+1 doubloon! (🪙 ${profile.coins})`); }, 1300);
       }
     }
@@ -802,6 +846,7 @@
       const r = s.result;
       awardCoins(r);
       if (G.mode !== 'client') maybeBotSnack(r);
+      if (G.mode === 'host') crewReveal(r);
       const mineLost = G.mode === 'local' ? (r.loser >= 0 && !s.players[r.loser].bot) : r.loser === G.me;
       setTimeout(() => {
         if (G.s !== s) return;
@@ -995,7 +1040,7 @@
       if (t && t.until > now) bubble = `<div class="s-bubble taunt">${esc(TAUNTS[t.i])}</div>`;
       else if (cb && cb.until > now) bubble = `<div class="s-bubble taunt chat-bubble">💬 ${esc(cb.text.length > 40 ? cb.text.slice(0, 38) + '…' : cb.text)}</div>`;
       else if (isTurn) {
-        const think = p.bot ? `<span class="dots"><i></i><i></i><i></i></span> <span class="tl">${esc(thinkLine(i))}</span>` : '<span class="dots"><i></i><i></i><i></i></span>';
+        const think = looksBot(p) ? `<span class="dots"><i></i><i></i><i></i></span> <span class="tl">${esc(thinkLine(i))}</span>` : '<span class="dots"><i></i><i></i><i></i></span>';
         bubble = `<div class="s-bubble think">${i === cs ? 'Yer wager!' : think}</div>`;
       }
       else if (s.phase === 'bidding') { const lb = lastBidBy(s, i); if (lb) bubble = `<div class="s-bubble">${lb.qty} × ${Dice.render(lb.face, p.kit, 22)}${lb.face === 1 ? '<small class="ones">1s</small>' : ''}</div>`; }
@@ -1003,7 +1048,7 @@
         : Array.from({ length: p.count }, () => `<i class="mini" style="background:${p.kit.face};border-color:${p.kit.edge}"></i>`).join('');
       const fr = seatFrame(i, now);
       G.seatFrameKey[i] = fr.key;
-      el.innerHTML = `${bubble}<div class="av ${fr.chew ? 'chewing' : ''}" data-seat="${i}">${seatPortraitHTML(p, fr)}</div><div class="s-name">${p.bot ? '<span class="bot-tag">🤖</span>' : ''}${nm(i)}</div><div class="s-cups">${cups}</div>${xrayHTML(i, p)}`;
+      el.innerHTML = `${bubble}<div class="av ${fr.chew ? 'chewing' : ''}" data-seat="${i}">${seatPortraitHTML(p, fr)}</div><div class="s-name">${looksBot(p) ? '<span class="bot-tag">🤖</span>' : ''}${nm(i)}</div><div class="s-cups">${cups}</div>${xrayHTML(i, p)}`;
       tbl.appendChild(el);
     });
   }
@@ -1235,7 +1280,7 @@
     if (!can && s.phase === 'bidding') {
       const p = s.players[s.turn];
       wait.classList.remove('hidden');
-      wait.textContent = p.bot ? `${p.name} is scheming…` : isHotseat() ? `Pass the device to ${p.name}` : `Waiting on ${p.name}…`;
+      wait.textContent = looksBot(p) ? `${p.name} is scheming…` : isHotseat() ? `Pass the device to ${p.name}` : `Waiting on ${p.name}…`;
     } else wait.classList.add('hidden');
     if (!can) return;
     clampSel();
@@ -1359,7 +1404,7 @@
       const btns = G.mode === 'local' ? '<button class="btn primary" id="rv-again">Play Again</button>'
         : G.mode === 'host' ? '<button class="btn primary" id="rv-lobby">Back to Lobby</button>'
         : '<p class="status">Waiting for the captain…</p>';
-      footer = `<div class="rv-winner">${Avatar.render(w.avatar, 96)}<h2>${nm(s.winner)} ${vb(s.winner, 'claims', 'claim')} the treasure!</h2></div><div class="rv-btns">${btns}<button class="btn" id="rv-menu">Main Menu</button></div>`;
+      footer = `<div class="rv-winner">${Avatar.render(w.avatar, 96)}<h2>${nm(s.winner)} ${vb(s.winner, 'claims', 'claim')} the treasure!</h2></div><div class="rv-btns">${btns}<button class="btn" id="rv-share">📣 ${isYou(s.winner) ? 'Brag' : 'Share'}</button><button class="btn" id="rv-menu">Main Menu</button></div>`;
     } else {
       footer = G.mode === 'client' ? '<p class="status">Next round in <span id="rv-count"></span>s</p>'
         : `<div class="rv-btns"><button class="btn primary" id="rv-next">Next Round${G.nextAt ? ' (<span id="rv-count"></span>)' : ' ⚓'}</button></div>`;
@@ -1485,7 +1530,7 @@
     if (!G.rigDraft || G.rigDraft.length !== (mine ? mine.dice.length : 0)) G.rigDraft = mine ? mine.dice.slice() : [];
     const canRig = mine && !mine.out && s.phase === 'bidding' && mine.dice.length;
     const others = G.mode === 'local' ? [] : s.players.map((p, i) => ({ p, i, seat: Online.seats.find(x => x.id === p.id) }))
-      .filter(o => o.i !== me && !o.p.bot && !(G.mode === 'client' && o.p.id === 'host'));   // the captain can't be kicked off their own ship
+      .filter(o => o.i !== me && !looksBot(o.p) && !(G.mode === 'client' && o.p.id === 'host'));   // the captain can't be kicked off their own ship
     $('#admin-tray').innerHTML = `
       <div class="tray-head">👑 Admin powers</div>
       <button class="btn admin-btn" id="adm-open-desk">📒 Open Admin Desk</button>
@@ -1541,7 +1586,7 @@
     if (ban) {
       if (!seat || !seat.account) return;
       if (!confirm(`Ban ${seat.account}? They won't be able to sign in or join games until unbanned in the Admin Desk.`)) return;
-      try { await Auth.admin.setBan(seat.account, true); toast(`${seat.account} is banned`); }
+      try { await Auth.admin.setBan(seat.account, true); adminSend(seat.account, 'ban', {}).catch(() => {}); toast(`${seat.account} is banned`); }
       catch (err) { toast(err.message, 4000); return; }
     }
     if (G.mode === 'host') hostKick(id, ban ? 'Ye have been banned from Bones & Brine.' : 'An admin threw ye off the ship.');
@@ -1598,6 +1643,7 @@
     $('#desk-players').innerHTML = here.length ? `<small>At this table:</small>${[...new Set(here)].map(u => `<button class="chip-btn" data-dpick="${esc(u)}">${esc(u)}${Auth.me && u === Auth.me.username ? ' (you)' : ''}</button>`).join('')}` : '';
     $('#adm-status').textContent = '';
     $('#desk-overlay').classList.remove('hidden');
+    renderOnline();
     if (username) deskLookup(username);
     else if (!deskUser) setTimeout(() => { if (!Device.touch) $('#adm-user').focus(); }, 60);
   }
@@ -1614,12 +1660,12 @@
     const c = e.target.closest('[data-coins]'), it = e.target.closest('[data-item]'), b = e.target.closest('[data-ban]');
     if (c) {
       const d = c.dataset.coins === 'custom' ? Number($('#adm-coin-n').value) | 0 : Number(c.dataset.coins);
-      if (d) deskRun(() => Auth.admin.addCoins(deskUser.username, d), `${d > 0 ? 'Gave' : 'Took'} ${Math.abs(d)} doubloon(s).`);
-    } else if (it) deskRun(() => Auth.admin.giveItem(deskUser.username, it.dataset.item, Number(it.dataset.q)), 'Goods updated.');
+      if (d) { const u = deskUser.username; deskRun(() => Auth.admin.addCoins(u, d).then(() => liveGift(u, { coins: d })), `${d > 0 ? 'Gave' : 'Took'} ${Math.abs(d)} doubloon(s).`); }
+    } else if (it) { const u = deskUser.username, item = it.dataset.item, qty = Number(it.dataset.q); deskRun(() => Auth.admin.giveItem(u, item, qty).then(() => liveGift(u, { item, qty })), 'Goods updated.'); }
     else if (b) {
       const banIt = b.dataset.ban === '1';
       if (banIt && !confirm(`Ban ${deskUser.username}?`)) return;
-      deskRun(() => Auth.admin.setBan(deskUser.username, banIt), banIt ? 'Banned.' : 'Unbanned.');
+      const u = deskUser.username; deskRun(() => Auth.admin.setBan(u, banIt).then(() => banIt && adminSend(u, 'ban', {})), banIt ? 'Banned.' : 'Unbanned.');
     }
   });
 
@@ -1669,6 +1715,7 @@
     renderMenuProfile(); renderAccountBar(); renderCoins();
     refreshMyChatStatus();
     if (me.is_admin) refreshReportCount();
+    liveTrack(); checkAdminMessages(false);      // gifts sent while away are already in the purse we just loaded
   }
   function renderAccountBar() {
     const bar = $('#account-bar');
@@ -1677,6 +1724,7 @@
     else bar.innerHTML = `Playing as a guest · <button class="linkish" id="acc-open">Sign in / create account</button>`;
     $('#admin-desk-btn').classList.toggle('hidden', !Auth.isAdmin);
     $('#g-admin-btn').classList.toggle('hidden', !Auth.isAdmin);
+    renderDaily();
   }
   $('#account-bar').addEventListener('click', async e => {
     if (e.target.closest('#acc-open')) go('account');
@@ -1746,6 +1794,59 @@
     const msg = { t: 'chat', id: fromId, from: seat.name, account: seat.account || null, admin: !!seat.admin, text: clean.text, ts: now };
     Net.broadcast(msg);
     addChat(msg);
+    crewReply(fromId, clean.text);
+  }
+
+  // --- Quick Game crewmates chat a little, like people do (host only; always clean, never spammy) ---
+  const CREW_LINES = {
+    hello: ['hi', 'hey', 'yo', 'ahoy', 'hi all', 'hello', 'hey guys', 'servus', 'hii', 'o/'],
+    start: ['gl', 'gl hf', 'glhf', 'good luck', 'gl all', 'lets go', 'gl everyone', 'viel glück'],
+    called: ['called it', 'knew it', 'lol', 'ha', 'nope', 'not today', 'caught ya', 'too greedy', 'hehe', 'easy'],
+    lost: ['nooo', 'bruh', 'how', 'rip', 'unlucky', 'ugh', 'wow ok', 'no way', 'what', 'damn dice', 'na toll', 'fair'],
+    held: ['told ya', 'ha', 'it was real lol', 'should have believed me', 'shouldve trusted me', 'nope its there'],
+    out: ['gg', 'im out gg', 'rip me', 'gg wp', 'well that was quick', 'gg all'],
+    over: ['gg', 'gg wp', 'ggs', 'gg all', 'nice one', 'gg that was close', 'wp', 'gg!', 'gut gespielt', 'again?'],
+    winner: ['gg', 'ez', 'gg wp', 'lets gooo', 'ggs', 'yesss', 'gg all']
+  };
+  function crewSay(seat, text) {
+    if (Online.role !== 'host' || !seat || !seat.account) return;    // guests can't talk, crewmates included
+    const now = Date.now();
+    if (now - (seat.lastSaid || 0) < 15000) return;
+    seat.lastSaid = now;
+    if (Math.random() < 0.15) text = text.replace(/[aeiou]/, m => m + m);  // the odd stretched letter
+    const msg = { t: 'chat', id: seat.id, from: seat.name, account: seat.account, admin: false, text, ts: now };
+    Net.broadcast(msg); addChat(msg);
+  }
+  const crewSeats = () => Online.role === 'host' ? Online.seats.filter(x => x.bot && x.bot.disguise && x.account) : [];
+  function crewMaybe(seat, kind, chance, delay = 900 + Math.random() * 2600) {
+    if (!seat || Math.random() > chance * (0.4 + (seat.bot.chatty || 0))) return;
+    setTimeout(() => crewSay(Online.seats.find(x => x.id === seat.id), pick(CREW_LINES[kind])), delay);
+  }
+  /** One crewmate (at most) reacts to a reveal. */
+  function crewReveal(r) {
+    if (!G.s || Online.role !== 'host') return;
+    const seatOf = i => i >= 0 && G.s.players[i] ? crewSeats().find(x => x.id === G.s.players[i].id) : null;
+    const opts = [];
+    if (r.loser >= 0 && seatOf(r.loser)) opts.push([seatOf(r.loser), r.eliminated ? 'out' : 'lost', r.eliminated ? 0.7 : 0.35]);
+    if (r.earner >= 0 && seatOf(r.earner)) opts.push([seatOf(r.earner), r.type === 'liar' && r.earner === r.caller ? 'called' : 'held', 0.3]);
+    if (!opts.length) return;
+    const [seat, kind, chance] = pick(opts);
+    crewMaybe(seat, kind, chance);
+    if (G.s.phase === 'over') {
+      const w = seatOf(G.s.winner);
+      crewSeats().forEach(x => crewMaybe(x, x === w ? 'winner' : 'over', 0.55, 2500 + Math.random() * 4000));
+    }
+  }
+  function crewReply(fromId, text) {
+    if (!crewSeats().length || String(fromId).startsWith('p-')) return;
+    const t = text.toLowerCase();
+    let kind = null;
+    if (/\b(hi|hey|hello|ahoy|yo|moin|servus|hallo)\b/.test(t)) kind = 'hello';
+    else if (/\b(gg|good game)\b/.test(t)) kind = 'over';
+    else if (/\b(gl|good luck)\b/.test(t)) kind = 'start';
+    if (!kind) return;
+    const cands = crewSeats().filter(x => Math.random() < 0.6);
+    if (cands.length) crewMaybe(pick(cands), kind, 0.8, 1500 + Math.random() * 3500);
   }
   function addChat(m) {
     const msg = { id: String(m.id || ''), from: cleanName(m.from), account: m.account ? String(m.account).slice(0, 16) : null, admin: !!m.admin,
@@ -1850,7 +1951,127 @@
     $$('.desk-tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.dtab === t));
     $('#desk-pane-reports').hidden = t !== 'reports';
     $('#desk-pane-pirates').hidden = t !== 'pirates';
+    $('#desk-pane-online').hidden = t !== 'online';
     if (t === 'reports') loadReports();
+    if (t === 'online') renderOnline();
+  }
+
+  // =====================================================================
+  //  WHO'S ONLINE (Supabase Realtime presence) + live admin messages
+  // =====================================================================
+  const Live = { ch: null, key: 'v' + Math.random().toString(36).slice(2, 10), since: Date.now(), timer: null };
+  const WHERE = { menu: 'Main menu', queue: 'In the Quick Game queue', lobby: 'In a lobby', game: 'Playing', locker: 'Captain\'s Locker',
+    forge: 'Dice Forge', shop: 'The Tavern', board: 'Leaderboard', rules: 'How to Play', local: 'Setting up Pass & Play', online: 'Online Voyage', account: 'Signing in' };
+  function liveInfo() {
+    let where = WHERE[current] || current;
+    if (current === 'game' && G.s) {
+      const kind = G.mode === 'local' ? (G.s.players.some(p => p.bot && p.bot.disguise) ? 'Quick Game (offline)' : 'Pass & Play') : G.s.players.some(p => p.bot && p.bot.disguise) ? 'Quick Game' : G.mode === 'host' ? 'online (captain)' : 'online';
+      where = `Playing ${kind} · ${G.s.players.length} seats · round ${G.s.round}`;
+    } else if (current === 'lobby' && Online.code) where = `In lobby ${Online.code} (${Online.seats.length} aboard)`;
+    return { name: profile.name, account: Auth.me ? Auth.me.username : null, admin: Auth.isAdmin, where, room: Online.code || null,
+      coins: profile.coins, since: Live.since, mobile: document.body.classList.contains('mobile') };
+  }
+  function liveStart() {
+    if (!Auth.enabled || !Auth.client || Live.ch) return;
+    const ch = Auth.client.channel('bnb-online-v1', { config: { presence: { key: Live.key }, broadcast: { self: false } } });
+    Live.ch = ch;
+    ch.on('presence', { event: 'sync' }, () => { if (Auth.isAdmin) renderOnline(); });
+    ch.on('broadcast', { event: 'nudge' }, ({ payload }) => { if (Auth.me && payload && payload.to === Auth.me.username) checkAdminMessages(true); });
+    ch.subscribe(status => { if (status === 'SUBSCRIBED') liveTrack(); });
+  }
+  let liveLast = '';
+  function liveTrack() {
+    if (!Live.ch) return;
+    const info = liveInfo(), sig = JSON.stringify(info);
+    if (sig === liveLast) return;
+    liveLast = sig;
+    Live.ch.track(info).catch(() => {});
+  }
+  setInterval(liveTrack, 5000);
+  function onlineList() {
+    if (!Live.ch) return [];
+    return Object.entries(Live.ch.presenceState()).map(([key, metas]) => ({ key, ...(metas[metas.length - 1] || {}) }))
+      .sort((a, b) => (b.admin - a.admin) || (!!b.account - !!a.account) || String(a.account || a.name).localeCompare(String(b.account || b.name)));
+  }
+  function renderOnline() {
+    if (!Auth.isAdmin) return;
+    const list = onlineList();
+    $('#desk-online-count').textContent = list.length;
+    if ($('#desk-pane-online').hidden || $('#desk-overlay').classList.contains('hidden')) return;
+    const signed = list.filter(x => x.account).length, playing = list.filter(x => /^Playing/.test(x.where || '')).length;
+    $('#online-sum').innerHTML = `<b>${list.length}</b> online now · ${signed} signed in · ${list.length - signed} guest${list.length - signed === 1 ? '' : 's'} · ${playing} at a table`;
+    const ago = t => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; };
+    $('#online-list').innerHTML = list.length ? list.map(x => {
+      const me = x.key === Live.key;
+      return `<div class="on-row">
+        <span class="on-dot"></span>
+        <span class="on-main"><b>${x.admin ? '👑 ' : ''}${esc(cleanName(x.account || x.name || '?'))}${me ? ' (you)' : ''}</b>
+          <small>${x.account ? '' : 'Guest · '}${esc(x.where || '')}${x.mobile ? ' · 📱' : ''} · on for ${ago(x.since || Date.now())} · 🪙 ${x.coins | 0}</small></span>
+        <span class="on-btns">${x.account && !me ? `
+          <button class="btn small" data-ogift="${esc(x.account)}" title="Gift 5 doubloons">🎁 +5</button>
+          <button class="btn small" data-oman="${esc(x.account)}" title="Gifts, goods, ban…">Manage</button>
+          <button class="btn small" data-okick="${esc(x.account)}" title="Send them back to the main menu">Kick</button>
+          ${x.admin ? '' : `<button class="btn small danger" data-oban="${esc(x.account)}">Ban</button>`}` : x.room && !me ? `<button class="btn small" data-ojoin="${esc(x.room)}">Join their lobby</button>` : ''}</span>
+      </div>`;
+    }).join('') : '<p class="hint">Connecting…</p>';
+  }
+  /** Leave a message for a player and nudge their open game to collect it. */
+  async function adminSend(user, cmd, payload) {
+    await Auth.admin.notify(user, cmd, payload);
+    if (Live.ch) Live.ch.send({ type: 'broadcast', event: 'nudge', payload: { to: String(user).toLowerCase() } });
+  }
+  /** After a Desk gift, update that player's open game too (not needed for yerself: the Desk reloads yer purse). */
+  const liveGift = (u, payload) => (Auth.me && u === Auth.me.username) ? Promise.resolve() : adminSend(u, 'gift', payload).catch(err => console.warn('live gift', err));
+  $('#online-list').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    try {
+      if (d.oman) { setDeskTab('pirates'); deskLookup(d.oman); }
+      else if (d.ogift) {
+        await Auth.admin.addCoins(d.ogift, 5); await adminSend(d.ogift, 'gift', { coins: 5 });
+        $('#adm-status').textContent = `🎁 Gave ${d.ogift} 5 doubloons.`;
+      } else if (d.okick) {
+        if (!confirm(`Kick ${d.okick} back to the main menu?`)) return;
+        await adminSend(d.okick, 'kick', {}); $('#adm-status').textContent = `Kicked ${d.okick}.`;
+      } else if (d.oban) {
+        if (!confirm(`Ban ${d.oban}? They're signed out right away and can't sign in until unbanned.`)) return;
+        await Auth.admin.setBan(d.oban, true); await adminSend(d.oban, 'ban', {});
+        $('#adm-status').textContent = `${d.oban} is banned.`;
+      } else if (d.ojoin) {
+        closeDesk(); if (Online.role) leaveOnline(); if (G.s) endGame();
+        go('online'); $('#join-code').value = d.ojoin; doJoin();
+      }
+    } catch (err) { $('#adm-status').textContent = err.message; }
+  });
+  setInterval(() => { if (Auth.isAdmin && !$('#desk-overlay').classList.contains('hidden')) renderOnline(); }, 15000);
+
+  /** Gifts, kicks and bans from the admin. `live` = we were online when it was sent (apply gift amounts). */
+  async function checkAdminMessages(live) {
+    if (!Auth.me) return;
+    let msgs = [];
+    try { msgs = await Auth.takeMessages(); } catch (_) { return; }
+    for (const m of msgs) {
+      const p = m.payload || {};
+      if (m.cmd === 'gift') {
+        // the server already holds the gift; while online we add it here too so our next save keeps it
+        if (live) {
+          if (p.coins) profile.coins = Math.max(0, profile.coins + (p.coins | 0));
+          if (p.item && ITEM_IDS.includes(p.item)) profile.inv[p.item] = Math.max(0, (profile.inv[p.item] | 0) + (p.qty | 0));
+          saveProfile(); renderCoins();
+        }
+        const what = p.coins ? `${p.coins > 0 ? '+' : ''}${p.coins} doubloon${Math.abs(p.coins) === 1 ? '' : 's'}` : p.item ? `${p.qty > 0 ? '+' : ''}${p.qty} ${(shopItem(p.item) || {}).name || p.item}` : 'a gift';
+        Sfx.coin(); toast(`👑 The admin sent ye ${what}!`, 5000);
+      } else if (m.cmd === 'kick') {
+        leaveQueue(); if (Online.role) leaveOnline(); if (G.s) endGame();
+        go('menu'); toast('👑 An admin sent ye back to the main menu.', 6000);
+      } else if (m.cmd === 'ban') {
+        const fresh = await Auth.restore().catch(() => null);
+        if (fresh && fresh.banned) {
+          leaveQueue(); if (Online.role) leaveOnline(); if (G.s) endGame();
+          await Auth.signOut(); renderAccountBar(); go('account'); toast('This account has been banned.', 8000);
+        }
+      }
+    }
   }
   $$('.desk-tabs .tab').forEach(b => b.addEventListener('click', () => setDeskTab(b.dataset.dtab)));
   $('#rep-filter').addEventListener('change', loadReports);
@@ -1905,14 +2126,14 @@
   // =====================================================================
   //  QUICK GAME: a matchmaking queue over Supabase Realtime
   // =====================================================================
-  const QUICK_SIZE = 4, GATHER_MS = 7000, BOT_OFFER_MS = 20000;
+  const QUICK_SIZE = 4, GATHER_MS = 7000;
   const Quick = { ch: null, key: null, joinedAt: 0, matched: false, timer: null, joinTimer: null };
   async function startQuick() {
     if (!Auth.enabled || !Auth.client) { toast('Quick Game needs the online server'); return; }
     if (!Net.available()) { toast('Online play is not available here (offline?)'); return; }
     leaveQueue();
     if (Online.role) leaveOnline();
-    Object.assign(Quick, { key: 'q' + Math.random().toString(36).slice(2, 10), joinedAt: Date.now(), matched: false });
+    Object.assign(Quick, { key: 'q' + Math.random().toString(36).slice(2, 10), joinedAt: Date.now(), matched: false, soloMs: 6000 + Math.random() * 9000 });
     go('queue');
     $('#q-title').textContent = 'Searching the seas…'; $('#q-sub').textContent = 'Looking for pirates to play with';
     $('#q-bots').classList.add('hidden');
@@ -1941,24 +2162,35 @@
     $('#q-names').innerHTML = list.slice(0, 8).map(x => `<span class="chip-btn${x.key === Quick.key ? ' on' : ''}">${x.admin ? '👑 ' : ''}${esc(cleanName(x.name))}</span>`).join('');
     const waited = Date.now() - Quick.joinedAt;
     $('#q-time').textContent = `${Math.floor(waited / 60000)}:${String(Math.floor(waited / 1000) % 60).padStart(2, '0')}`;
-    if (waited > BOT_OFFER_MS && list.length < 2) { $('#q-bots').classList.remove('hidden'); $('#q-sub').textContent = 'Quiet seas right now. Keep waiting, or play with bots.'; }
+    // Nobody else about? After a short, natural-feeling wait we crew up anyway; the seats fill as pirates "board".
+    if (list.length < 2 && waited > Quick.soloMs) { formQuickMatch([{ key: Quick.key }]); return; }
     // The longest-waiting pirate captains the match once there are 4, or 2+ have waited a few seconds.
     if (list.length >= 2 && list[0].key === Quick.key && (list.length >= QUICK_SIZE || Date.now() - list[1].at > GATHER_MS)) formQuickMatch(list.slice(0, QUICK_SIZE));
   }
   function formQuickMatch(group) {
     Quick.matched = true;
     $('#q-title').textContent = 'Crew found! ⚓'; $('#q-sub').textContent = 'Hoisting the flag…';
+    const solo = group.length < 2;
     Net.host(code => {
       Online.role = 'host'; Online.code = code; Online.started = false; Online.rules = { ...savedRules };
       Online.seats = [{ id: 'host', ...myProfilePayload(), bot: null, account: Auth.me ? Auth.me.username : null, admin: Auth.isAdmin }];
       if (!Auth.isAdmin) Online.seats[0].avatar = Avatar.stripAdmin(Online.seats[0].avatar);
-      Online.quick = { expect: group.length - 1 };
-      Quick.ch.send({ type: 'broadcast', event: 'match', payload: { code, members: group.slice(1).map(g => g.key) } });
+      // table size: a crew of humans fills to 4; a lone pirate gets 3 to 5 seats, like a real queue would give
+      Online.quick = { expect: group.length - 1, target: solo ? pick([3, 4, 4, 4, 5, 5]) : QUICK_SIZE };
+      if (!solo) Quick.ch.send({ type: 'broadcast', event: 'match', payload: { code, members: group.slice(1).map(g => g.key) } });
       setTimeout(leaveQueue, 800);
       go('lobby');
-      toast('⚡ Crew found — setting sail as soon as everyone is aboard');
-      setTimeout(quickAutoStart, 15000);                          // don't wait forever for a slow joiner
-    }, err => { Quick.matched = false; toast(Net.describe(err)); });
+      if (solo) setTimeout(quickAutoStart, 900 + Math.random() * 1200);
+      else { toast('⚡ Crew found — setting sail as soon as everyone is aboard'); setTimeout(quickAutoStart, 15000); }   // don't wait forever for a slow joiner
+    }, err => {
+      Quick.matched = false;
+      if (!solo) { toast(Net.describe(err)); return; }
+      // the matchmaking server is down: play the same table on this device instead
+      leaveQueue();
+      const seats = [{ id: 'L0', name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId), bot: null }];
+      while (seats.length < 4) seats.push({ ...makeCrewmate(seats), id: 'L' + seats.length });
+      startLocal(seats, { ...savedRules });
+    });
   }
   function onQuickMatch(p) {
     if (!p || !Array.isArray(p.members) || !p.members.includes(Quick.key) || Quick.matched) return;
@@ -1979,23 +2211,112 @@
     const humansJoined = Online.seats.filter(x => !x.bot && x.id !== 'host').length;
     if (Online.quick && humansJoined >= Online.quick.expect) setTimeout(quickAutoStart, 2000);
   }
+  /** Fill the empty seats with crewmates who board one by one, then set sail. */
   function quickAutoStart() {
     if (Online.role !== 'host' || Online.started || !Online.quick) return;
+    const target = Online.quick.target || QUICK_SIZE;
     Online.quick = null;
-    while (Online.seats.length < QUICK_SIZE) {
-      const b = makeBot(Online.seats);
-      Online.seats.push({ id: 'bot-' + Math.random().toString(36).slice(2, 8), name: b.name, avatar: b.avatar, kit: b.kit, bot: { persona: b.persona } });
-    }
-    hostLobbyBroadcast();
-    $('#lobby-start').click();
+    (function board() {
+      if (Online.role !== 'host' || Online.started) return;
+      if (Online.seats.length >= target) {
+        setTimeout(() => { if (Online.role === 'host' && !Online.started && Online.seats.length >= 2) $('#lobby-start').click(); }, 1400 + Math.random() * 1600);
+        return;
+      }
+      const c = makeCrewmate(Online.seats);
+      Online.seats.push(c);
+      Sfx.click(); hostLobbyBroadcast();
+      crewMaybe(c, 'hello', 0.3, 700 + Math.random() * 1800);
+      setTimeout(board, 600 + Math.random() * 2400);
+    })();
   }
   $('#quick-btn').addEventListener('click', () => { Sfx.click(); startQuick(); });
   $('#q-cancel').addEventListener('click', () => { leaveQueue(); go('menu'); });
-  $('#q-bots').addEventListener('click', () => {
-    leaveQueue();
-    const seats = [{ id: 'L0', name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId), bot: null }];
-    while (seats.length < QUICK_SIZE) { const b = makeBot(seats); seats.push({ id: 'L' + seats.length, name: b.name, avatar: b.avatar, kit: b.kit, bot: { persona: b.persona } }); }
-    startLocal(seats, { ...savedRules });
+
+  // =====================================================================
+  //  DAILY CHEST · LEADERBOARD · SHARING
+  // =====================================================================
+  const DAILY_LADDER = [1, 1, 2, 2, 3, 3, 5];
+  const todayUTC = () => new Date().toISOString().slice(0, 10);
+  const dayBefore = d => new Date(Date.parse(d + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+  function guestDaily() { return store.get('bnb.daily', { last: null, streak: 0 }); }
+  function dailyReady() { return Auth.me ? Auth.dailyReady() : guestDaily().last !== todayUTC(); }
+  function dailyStreakNext() {
+    const d = Auth.me ? { last: Auth.me.last_daily, streak: Auth.me.daily_streak | 0 } : guestDaily();
+    return d.last === dayBefore(todayUTC()) ? d.streak + 1 : 1;
+  }
+  function renderDaily() {
+    const btn = $('#daily-chest'); if (!btn) return;
+    const ready = dailyReady();
+    btn.classList.toggle('hidden', !ready);
+    if (ready) {
+      const day = dailyStreakNext(), reward = DAILY_LADDER[(day - 1) % 7];
+      $('#daily-sub').textContent = `Day ${day} · 🪙 ${reward} free doubloon${reward > 1 ? 's' : ''}${day % 7 === 6 ? ' · big chest tomorrow!' : ''}`;
+    }
+  }
+  $('#daily-chest').addEventListener('click', async () => {
+    const btn = $('#daily-chest'); if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      let reward, streak;
+      if (Auth.me) {
+        const r = await Auth.claimDaily();
+        if (!r.claimed) { toast('Ye already opened today\'s chest — come back tomorrow!'); renderDaily(); return; }
+        reward = r.reward; streak = r.streak; profile.coins = r.coins;
+      } else {
+        streak = dailyStreakNext(); reward = DAILY_LADDER[(streak - 1) % 7];
+        store.set('bnb.daily', { last: todayUTC(), streak });
+        profile.coins += reward;
+      }
+      saveProfile(); Sfx.coin(); vibrate([40, 30, 80]);
+      btn.classList.add('opened');
+      toast(`🧰 Day ${streak} chest: +${reward} doubloon${reward > 1 ? 's' : ''}! (🪙 ${profile.coins}) Come back tomorrow to keep the streak.`, 5000);
+      setTimeout(() => { btn.classList.remove('opened'); renderDaily(); }, 900);
+    } catch (err) { toast(err.message, 4000); }
+    finally { btn.disabled = false; }
+  });
+  setInterval(() => { if (current === 'menu') renderDaily(); }, 60000);
+
+  let boardPeriod = 'week';
+  async function loadBoard() {
+    $$('.board-tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.period === boardPeriod));
+    const list = $('#board-list'), meBox = $('#board-me');
+    if (!Auth.enabled) { list.innerHTML = '<p class="hint">The leaderboard needs the online server.</p>'; meBox.innerHTML = ''; return; }
+    list.innerHTML = '<p class="hint">Countin\' the plunder…</p>';
+    try {
+      const r = await Auth.leaderboard(boardPeriod);
+      const rows = r.rows || [];
+      const mine = Auth.me ? Auth.me.username : null;
+      const medal = n => n === 1 ? '🥇' : n === 2 ? '🥈' : n === 3 ? '🥉' : '#' + n;
+      list.innerHTML = rows.length ? rows.map(x => `<li class="${x.username === mine ? 'me' : ''} ${x.pos <= 3 ? 'top' : ''}">
+          <span class="b-pos">${medal(x.pos)}</span>${Avatar.render(Avatar.sanitize(x.avatar || {}), 40)}
+          <span class="b-name">${x.username === mine ? 'You' : esc(cleanName(x.username))}</span><span class="b-score">🎲 ${x.score | 0}</span></li>`).join('')
+        : `<p class="hint">No dice won ${boardPeriod === 'week' ? 'this week' : 'yet'}. Be the first name on the board!</p>`;
+      meBox.innerHTML = !Auth.me ? '<p class="hint">Playing as a guest: <button class="linkish" data-go="account">sign in</button> to get yer name on the board.</p>'
+        : r.me && r.me.pos ? `<b>Yer rank: #${r.me.pos}</b> · 🎲 ${r.me.score} dice won${boardPeriod === 'week' ? ' this week' : ''}`
+        : `<b>Not on the board yet.</b> Make another pirate lose a die to get on it!`;
+    } catch (err) { list.innerHTML = `<p class="status">${esc(err.message)}</p>`; }
+  }
+  onShow.board = loadBoard;
+  $$('.board-tabs .tab').forEach(b => b.addEventListener('click', () => { boardPeriod = b.dataset.period; loadBoard(); }));
+
+  const GAME_URL = 'https://sharp-confusion.github.io/bones-and-brine/';
+  async function shareGame(text) {
+    const url = /^https?:/.test(location.protocol) && !/localhost|127\.0\.0\.1/.test(location.host) ? location.origin + location.pathname : GAME_URL;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Bones & Brine — Pirate Liar\'s Dice', text, url }); return; }
+      await navigator.clipboard.writeText(`${text} ${url}`); toast('📣 Link copied! Paste it to yer crew.');
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;          // they closed the share sheet
+      prompt('Copy this and send it to yer crew:', `${text} ${url}`);
+    }
+  }
+  $('#share-btn').addEventListener('click', () => { Sfx.click(); shareGame('Come play pirate liar\'s dice with me 🏴‍☠️🎲 Free in the browser:'); });
+  $('#reveal').addEventListener('click', e => {
+    if (!e.target.closest('#rv-share') || !G.s) return;
+    const s = G.s, won = isYou(s.winner);
+    const mine = Number(G.myDiceWon) || 0;
+    shareGame(won ? `I just won a game of Bones & Brine${mine ? ` and took ${mine} dice off the table` : ''} 🏴‍☠️🎲 Think ye can out-bluff me?`
+      : `Just played Bones & Brine, pirate liar's dice 🏴‍☠️🎲 Come out-bluff me:`);
   });
 
   // ---------- boot ----------
@@ -2009,6 +2330,7 @@
   const room = new URLSearchParams(location.search).get('room');
   if (room) { go('online'); $('#join-code').value = room.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); setStatus('Ye have an invite — press Climb Aboard.'); }
 
+  liveStart();                                   // "who's online" for the admin Desk
   // accounts: restore a saved sign-in, otherwise offer the sign-in screen (once; guests can carry on)
   renderAccountBar();
   if (Auth.enabled) {
