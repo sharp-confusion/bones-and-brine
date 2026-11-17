@@ -99,10 +99,10 @@ def render_covers(outdir):
     def seat_at(deg):                                      # (position, turn) for a pirate at this angle round the back of the table
         a = math.radians(deg)
         return (RC.x + RP * math.sin(a), RC.y + RP * math.cos(a), 0), -a
-    boxo((0, 6.0, 3.0), (22, 0.3, 9), wall)                                          # back wall with planks
-    for k in range(-10, 11):
-        boxo((k * 1.05, 5.82, 3.0), (0.06, 0.08, 9), plank)
-    boxo((0, 5.8, 0.2), (22, 0.12, 0.25), plank)
+    boxo((0, 6.0, 4.0), (44, 0.3, 14), wall)                                          # back wall with planks
+    for k in range(-20, 21):
+        boxo((k * 1.05, 5.82, 4.0), (0.06, 0.08, 14), plank)
+    boxo((0, 5.8, 0.2), (44, 0.12, 0.25), plank)
     for x in (-5.6, 5.6):                                                            # barrels in the corners
         for (dx, dz) in ((0, 0.6), (1.1, 0.6), (0.55, 1.75)):
             b = cylo((x + (dx if x < 0 else -dx), 4.6, dz), 0.55, 1.15, mat('BarrelSide', '#7a4a24', 0.8), verts=28)
@@ -117,7 +117,7 @@ def render_covers(outdir):
     # the throne, with the admin's Davy Jones on it (raised at the back)
     DJ_UP, DJ_SCALE = 0.75, 1.4                            # the admin sits bigger and higher than everyone else
     TX, TY, TZ0 = RC.x, RC.y + RP + 0.45, -0.35 + DJ_UP   # the throne stands at the head of the round table
-    boxo((TX, TY + 0.15, TZ0 / 2 - 0.2), (3.2, 2.0, TZ0 + 0.4), plank)                         # dais
+    boxo((TX, TY + 0.45, TZ0 / 2 - 0.2), (3.2, 1.4, TZ0 + 0.4), plank)                         # dais
     boxo((TX, TY + 0.15, TZ0 + 0.02), (3.3, 2.1, 0.06), gold)
     boxo((TX, TY + 0.05, TZ0 + 0.18), (2.5, 1.5, 0.3), velvet)                       # seat cushion
     boxo((TX, TY + 0.85, TZ0 + 2.1), (2.8, 0.25, 4.1), M['Wood']); boxo((TX, TY + 0.7, TZ0 + 1.95), (2.3, 0.08, 3.3), velvet)
@@ -151,18 +151,18 @@ def render_covers(outdir):
         bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=d.length, location=(p0 + p1) / 2, vertices=20); o = own(bpy.context.object)
         o.rotation_euler = d.to_track_quat('Z', 'Y').to_euler(); o.data.materials.append(mat_); bpy.ops.object.shade_smooth()
         return o
-    def seated(at, turn, pants, chair=True, hip=0.62):
+    def seated(at, turn, pants, chair=True, hip=0.62, thigh_z=-0.4, reach=0.95, k=1.0):
         Mw = Matrix.Translation(Vector(at)) @ Matrix.Rotation(turn, 4, 'Z')
         L = lambda x, y, z: Mw @ Vector((x, y, z))
         pm = mat('Pants_' + pants, pants, 0.85)
         bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=L(0, 0.02, -0.22), segments=28, ring_count=14); h = own(bpy.context.object)
         h.scale = (hip, hip * 0.9, 0.42); h.rotation_euler = (0, 0, turn); h.data.materials.append(pm); bpy.ops.object.shade_smooth()   # hips
         for sx in (-1, 1):
-            knee, ankle = L(sx * 0.28, -0.95, -0.4), L(sx * 0.3, -1.05, FLOOR - at[2] + 0.12)
-            limb(L(sx * 0.28, -0.05, -0.38), knee, 0.21, pm)                         # thigh
-            limb(knee, ankle, 0.16, pm)                                               # shin
-            bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=L(sx * 0.3, -1.18, FLOOR - at[2] + 0.1)); b = own(bpy.context.object)
-            b.scale = (0.17, 0.3, 0.12); b.rotation_euler = (0, 0, turn); b.data.materials.append(M['Leather']); bpy.ops.object.shade_smooth()   # boot
+            knee, ankle = L(sx * 0.28 * k, -reach, thigh_z), L(sx * 0.3 * k, -reach - 0.1, FLOOR - at[2] + 0.12)
+            limb(L(sx * 0.28 * k, -0.05, thigh_z + 0.02), knee, 0.21 * k, pm)             # thigh
+            limb(knee, ankle, 0.16 * k, pm)                                           # shin
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=1, location=L(sx * 0.3 * k, -reach - 0.23, FLOOR - at[2] + 0.1)); b = own(bpy.context.object)
+            b.scale = (0.17 * k, 0.3 * k, 0.12 * k); b.rotation_euler = (0, 0, turn); b.data.materials.append(M['Leather']); bpy.ops.object.shade_smooth()   # boot
         if not chair:
             return
         st = -0.62                                                                    # seat top (local z)
@@ -176,7 +176,7 @@ def render_covers(outdir):
             o = boxo(L(0, 0.62, z), (1.25, 0.08, 0.16), chairwood); o.rotation_euler = (0, 0, turn)               # back rails
 
     seated(*seat_at(-74), '#3a3f2a'); seated(*seat_at(-38), '#e8e1d0'); seated(*seat_at(38), '#5a4a32', hip=0.55); seated(*seat_at(74), '#2a2320')
-    # (Davy Jones sits straight on the throne cushion: legs would poke out over the table from up there)
+    seated(DJ_AT, 0, '#1b2a52', chair=False, hip=0.68 * DJ_SCALE, thigh_z=0.02, reach=0.82, k=1.3)   # Davy Jones's legs, down the front of the throne
     for (x, y, h) in ((RC.x, RC.y + 0.2, 0.5), (RC.x - 1.3, RC.y - 1.6, 0.3), (RC.x + 1.45, RC.y - 1.5, 0.4)):
         candle(x, y, h)
     for (x, y, rz) in ((RC.x - 0.5, RC.y - 0.9, 0.3), (RC.x + 0.45, RC.y - 1.15, 1.1), (RC.x + 0.1, RC.y - 2.0, 0.6), (RC.x - 1.2, RC.y - 0.4, 0.9), (RC.x + 1.3, RC.y - 0.5, 0.2), (RC.x - 0.3, RC.y - 2.2, 0.7)):
@@ -225,6 +225,6 @@ def render_covers(outdir):
         scene.render.resolution_percentage = 100
         scene.render.filepath = os.path.join(outdir, name + '.png')
         bpy.ops.render.render(write_still=True)
-    shoot('cover_landscape_raw', 1920, 1080, (0, -10.8, 4.6), (0, 0.6, 1.6), 30)
-    shoot('cover_portrait_raw', 800, 1200, (0, -10.8, 4.4), (0, 0.9, 2.1), 46)
+    shoot('cover_landscape_raw', 1920, 1080, (0, -12.0, 4.4), (0, 0.6, 2.25), 27)
+    shoot('cover_portrait_raw', 800, 1200, (0, -12.0, 4.3), (0, 0.9, 2.75), 40)
     shoot('cover_square_raw', 800, 800, (CX - 0.15, -4.9, 1.45), (CX, -1.0, 1.22), 33)
