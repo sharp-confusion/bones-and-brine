@@ -3,6 +3,7 @@
    (tools/build-crazygames.sh). The game talks to it through window.BNB_HOOKS; the SDK docs are at
    https://docs.crazygames.com/sdk/intro/ */
 (function () {
+  const ADS = false;     // the game is ad-free for now; set to true to show a midgame ad after each finished game
   let sdk = null, ready = false, inGame = false, adMuted = false, settingsMuted = false;
   const applyMute = () => { window.BNB_MUTED = adMuted || settingsMuted; };
 
@@ -34,7 +35,7 @@
     gameover(won) {
       if (!ready) return;
       if (won) sdk.game.happytime();
-      setTimeout(midgameAd, 2500);                         // after the winner screen has shown
+      if (ADS) setTimeout(midgameAd, 2500);                // after the winner screen has shown (ads are off for now)
     },
     /** Lobby open for joiners → show CrazyGames' invite button; null → hide it. */
     lobby(code) {
