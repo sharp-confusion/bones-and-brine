@@ -40,7 +40,7 @@ Sign-in with a username and password, cloud saves, and the admin are powered by 
 - **📣 Share** on the main menu and **Brag** after a game. Links show a preview picture (`og.png`) in Discord, WhatsApp, Reddit and so on.
 - **Quick Game crewmates**: when the queue is quiet, the table fills with bots that look and play like real people (gamer-tag names, uneven think times, the odd "gg"). Only the admin sees them marked 🤖.
 
-**Admin Desk → 🟢 Online** shows everyone who has the game open right now (guests too), where they are and for how long. Signed-in players can be gifted, managed, kicked to the menu or banned on the spot.
+**Admin Desk → 🟢 Online** shows everyone who has the game open right now (guests too). Tap a player for their device, purse, the table they are at (players, dice left, current wager, whose turn) and their recent activity. **👁 Watch** spectates their online table invisibly with every cup shown. Signed-in players can be gifted, managed, kicked to the menu or banned on the spot. Updates arrive every ~15 seconds (Supabase limits how often presence can change).
 
 **Connection relay (TURN):** players on strict school, work or mobile networks sometimes can't connect to each other directly. Make a free account at https://www.metered.ca/stun-turn, create an app, and put its name and API key into `turnApp` / `turnKey` in `js/config.js`.
 

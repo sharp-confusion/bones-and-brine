@@ -123,3 +123,13 @@ end $$;
 
 revoke all on function public.admin_notify(text, text, jsonb), public.take_admin_messages() from public, anon;
 grant execute on function public.admin_notify(text, text, jsonb), public.take_admin_messages() to authenticated;
+
+-- Hosts check who joined their table (and whether a spectator really is the admin), even when the host is a guest.
+-- Takes an id the host got from Supabase's own token check, so it can't be used to look players up by name.
+create or replace function public.account_check(p_id uuid)
+returns table (id uuid, username text, is_admin boolean, banned boolean)
+language sql security definer stable set search_path = public as $$
+  select p.id, p.username, p.is_admin, p.banned from public.profiles p where p.id = p_id;
+$$;
+revoke all on function public.account_check(uuid) from public;
+grant execute on function public.account_check(uuid) to anon, authenticated;

@@ -102,8 +102,11 @@ const Auth = (() => {
     if (!enabled || !accessToken) return null;
     const { data, error } = await sb.auth.getUser(accessToken);
     if (error || !data || !data.user) return null;
-    const { data: prof } = await sb.from('profiles').select('id, username, is_admin, banned').eq('id', data.user.id).single();
-    return prof || null;
+    const { data: prof } = await sb.from('profiles').select('id, username, is_admin, banned').eq('id', data.user.id).maybeSingle();
+    if (prof) return prof;
+    // a guest host can't read profiles directly; ask the server about this one verified id instead
+    const { data: rows } = await sb.rpc('account_check', { p_id: data.user.id });
+    return (Array.isArray(rows) ? rows[0] : rows) || null;
   }
 
   async function rpc(fn, args) {

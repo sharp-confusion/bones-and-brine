@@ -45,6 +45,15 @@
     setTimeout(() => t.remove(), ms + 450);
   }
   function vibrate(p) { if (document.body.classList.contains('mobile') && navigator.vibrate) { try { navigator.vibrate(p); } catch (_) {} } }
+  // Recent activity, shown to the admin in the Desk's Online tab (kept in memory only, never stored).
+  const ActLog = [];
+  function logAct(text) {
+    const last = ActLog[ActLog.length - 1];
+    if (last && last.text === text && Date.now() - last.at < 3000) return;
+    ActLog.push({ at: Date.now(), text: String(text).slice(0, 90) });
+    if (ActLog.length > 12) ActLog.shift();
+    try { liveTrack(); } catch (_) {}
+  }
 
   // ---------- sound (synthesised, no files) ----------
   const Sfx = (() => {
@@ -140,7 +149,7 @@
     current = name;
     if (onShow[name]) onShow[name]();
     window.scrollTo(0, 0);
-    try { liveTrack(); } catch (_) {}            // tell the admin's "who's online" where we are
+    try { logAct('→ ' + (WHERE[name] || name)); } catch (_) {}   // the admin's "who's online" shows where we are
   }
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-go]');
@@ -310,7 +319,7 @@
     const b = e.target.closest('[data-buy]'); if (!b) return;
     const it = shopItem(b.dataset.buy);
     if (!it || profile.coins < it.price) { toast('Not enough doubloons — win some challenges first!'); return; }
-    profile.coins -= it.price; profile.inv[it.id] += it.qty;
+    profile.coins -= it.price; profile.inv[it.id] += it.qty; logAct(`Bought ${it.name} for 🪙 ${it.price}`);
     saveProfile(); Sfx.coin(); vibrate(30);
     toast(`Bought ${it.name}! Use it at the table with the 🍺 button.`);
     renderShop();
@@ -421,7 +430,7 @@
   });
 
   // ---------- online ----------
-  const Online = { role: null, code: '', seats: [], rules: { ...savedRules }, started: false };
+  const Online = { role: null, code: '', seats: [], rules: { ...savedRules }, started: false, watch: false, watchers: new Set() };
   const setStatus = m => { $('#online-status').textContent = m; };
   const myProfilePayload = () => ({ name: profile.name, avatar: profile.avatar, kit: kitById(profile.kitId) });
   // `account` = the server-verified username (null for guests); `admin` = verified admin
@@ -438,6 +447,7 @@
   }
   function leaveOnline() {
     Net.close(); Online.role = null; Online.seats = []; Online.started = false; Online.code = ''; Online.quick = null;
+    Online.watch = false; Online.watchers = new Set(); G.watching = false; document.body.classList.remove('watching');
     if (typeof resetChat === 'function') resetChat();
   }
 
@@ -470,6 +480,7 @@
 
   function hostLobbyBroadcast() {
     Online.seats.forEach(r => { if (!r.bot && r.id !== 'host') Net.sendTo(r.id, { t: 'lobby', code: Online.code, seats: Online.seats.map(x => publicSeat(x, r.admin)), rules: Online.rules }); });
+    Online.watchers.forEach(id => Net.sendTo(id, { t: 'lobby', code: Online.code, seats: Online.seats.map(x => publicSeat(x, true)), rules: Online.rules }));
     if (current === 'lobby') renderLobby();
   }
   function renderLobby() {
@@ -572,6 +583,7 @@
   }
   function hostHandle(id, msg) {
     if (msg.t === 'join') { hostJoin(id, msg); return; }
+    if (msg.t === 'watch') { hostWatch(id, msg); return; }
     if (msg.t === 'chat') { hostChat(id, String(msg.text || '')); return; }
     if (msg.t === 'admin') {
       const seat = Online.seats.find(x => x.id === id);
@@ -589,6 +601,14 @@
     } else if (msg.t === 'use' && shopItem(msg.id) && (!shopItem(msg.id).adminOnly || (Online.seats.find(x => x.id === id) || {}).admin)) {
       sendUse(seat, msg.id);
     }
+  }
+  /** Host: a verified admin asked to spectate. They get no seat, players aren't told, and they see every cup. */
+  async function hostWatch(id, msg) {
+    const prof = await Auth.verify(msg.token).catch(() => null);
+    if (!prof || !prof.is_admin || prof.banned) { Net.sendTo(id, { t: 'error', msg: 'Only the admin can watch a table.' }); setTimeout(() => Net.drop(id), 300); return; }
+    Online.watchers.add(id);
+    Net.sendTo(id, { t: 'welcome', id });
+    if (G.s && G.mode === 'host') broadcastState(); else hostLobbyBroadcast();
   }
   function clientHandle(msg) {
     switch (msg.t) {
@@ -609,6 +629,7 @@
   }
   Net.on('disconnect', id => {
     if (Online.role !== 'host') return;
+    if (Online.watchers.delete(id)) return;                       // an admin stopped watching: nobody notices
     const i = Online.seats.findIndex(x => x.id === id);
     const name = i >= 0 ? Online.seats[i].name : 'A pirate';
     if (i >= 0) Online.seats.splice(i, 1);
@@ -659,7 +680,8 @@
     v.players = (v.players || []).map(p => ({ ...p, name: cleanName(p.name), avatar: Avatar.sanitize(p.avatar), kit: Dice.sanitize(p.kit) || Dice.PRESETS[0],
       dice: (p.dice || []).map(d => Math.max(1, Math.min(6, d | 0))), count: p.count | 0 }));
     const prev = G.snap;
-    G.s = v; G.me = G.viewer = G.bottom = you; G.snap = snapOf(v);
+    G.s = v; G.me = G.viewer = you; G.bottom = you >= 0 ? you : 0; G.snap = snapOf(v);
+    G.watching = !!Online.watch; document.body.classList.toggle('watching', G.watching);   // admin spectating: no seat, sees every cup
     G.turnDeadline = turnLeft ? Date.now() + turnLeft : 0;
     if (current !== 'game') go('game');
     effects(prev); render();
@@ -789,6 +811,7 @@
       v.players.forEach(q => { if (q.bot) q.bot = q.bot.disguise && !(seat && seat.admin) ? null : { persona: q.bot.persona }; });
       Net.sendTo(p.id, { t: 'state', s: v, you: i, turnLeft: left, xray });
     });
+    if (Online.watchers.size) { const full = JSON.parse(JSON.stringify(s)); Online.watchers.forEach(id => Net.sendTo(id, { t: 'state', s: full, you: -1, turnLeft: left, xray: true })); }
   }
 
   // --- "You" instead of your own name -------------------------------------------
@@ -822,10 +845,12 @@
       if (r.earner === walletSeat()) {
         profile.coins += 1; saveProfile();
         G.myDiceWon = (G.myDiceWon | 0) + 1; Auth.recordDiceWon();       // counts for the leaderboard
+        logAct(`Won a die off ${r.loser >= 0 && G.s.players[r.loser] ? G.s.players[r.loser].name : 'someone'}`);
         setTimeout(() => { Sfx.coin(); toast(`+1 doubloon! (🪙 ${profile.coins})`); }, 1300);
       }
     }
     if (r.loser >= 0 && r.loser === walletSeat()) {
+      logAct(r.eliminated ? 'Lost their last die and walked the plank ☠' : 'Lost a die');
       r.coinLost = profile.coins > 0;
       if (r.coinLost) {
         profile.coins -= 1; saveProfile();
@@ -839,6 +864,12 @@
 
   function effects(prev) {
     const s = G.s; if (!s) return;
+    if (!prev && !G.watching) {
+      const quick = s.players.some(p => p.bot && p.bot.disguise);
+      const kind = G.mode === 'local' ? (quick ? 'a Quick Game (offline)' : 'Pass & Play') : quick ? 'a Quick Game' : 'an online game';
+      logAct(`Started ${kind} with ${s.players.length} pirates`);
+    }
+    if (prev && prev.phase !== 'over' && s.phase === 'over' && !G.watching) logAct(isYou(s.winner) ? 'Won the game! 🏆' : `Game over: ${s.players[s.winner] ? s.players[s.winner].name : '?'} won`);
     if (!prev || s.round !== prev.round) { Sfx.rattle(); G.rollAnim = true; G.roundAt = Date.now(); setTimeout(warmTable, SHAKE_MS + 150); }
     else if (s.history.length > prev.hist && s.phase === 'bidding') Sfx.bid();
     if (prev && prev.phase === 'bidding' && s.phase !== 'bidding') {
@@ -919,6 +950,7 @@
       floatAt(seat, `<div class="prop prop-${id}"><span class="item-emoji">${it.emoji}</span>${smoke}</div>`, 'use use-' + id, it.ms);
     }
     const verb = isYou(seat) ? it.verbYou : it.verb;
+    if (isYou(seat)) logAct(`Used ${it.name}`);
     const log = $('#log-body'); if (log) { log.insertAdjacentHTML('beforeend', `<p>${it.emoji} <b>${nm(seat)}</b> ${verb}</p>`); log.scrollTop = log.scrollHeight; }
     if (id === 'drink' || id === 'rum') setTimeout(() => Sfx.bid(), 900);
   }
@@ -964,7 +996,7 @@
     if (buy) {
       const it = shopItem(buy.dataset.buyuse);
       if (!it || profile.coins < it.price) { toast('Not enough doubloons'); return; }
-      profile.coins -= it.price; profile.inv[it.id] += it.qty; saveProfile(); renderCoins(); Sfx.coin();
+      profile.coins -= it.price; profile.inv[it.id] += it.qty; saveProfile(); renderCoins(); Sfx.coin(); logAct(`Bought ${it.name} at the table for 🪙 ${it.price}`);
       $('#item-tray').classList.add('hidden');
       useItem(it.id);
       return;
@@ -1488,7 +1520,7 @@
   // =====================================================================
   const ITEM_IDS = SHOP.filter(x => !x.adminOnly).map(x => x.id);
   const mySeatIdx = () => G.mode === 'local' ? walletSeat() : G.me;
-  const showXray = () => Auth.isAdmin && G.xray && (G.mode !== 'client' || G.xrayFeed);
+  const showXray = () => Auth.isAdmin && (G.watching && G.xrayFeed || G.xray && (G.mode !== 'client' || G.xrayFeed));
 
   /** Host: carry out a command from a server-verified admin (checked in hostHandle). */
   function adminCommand(fromId, msg) {
@@ -1959,7 +1991,7 @@
   // =====================================================================
   //  WHO'S ONLINE (Supabase Realtime presence) + live admin messages
   // =====================================================================
-  const Live = { ch: null, key: 'v' + Math.random().toString(36).slice(2, 10), since: Date.now(), timer: null };
+  const Live = { ch: null, key: 'v' + Math.random().toString(36).slice(2, 10), since: Date.now(), timer: null, open: new Set() };
   const WHERE = { menu: 'Main menu', queue: 'In the Quick Game queue', lobby: 'In a lobby', game: 'Playing', locker: 'Captain\'s Locker',
     forge: 'Dice Forge', shop: 'The Tavern', board: 'Leaderboard', rules: 'How to Play', local: 'Setting up Pass & Play', online: 'Online Voyage', account: 'Signing in' };
   function liveInfo() {
@@ -1968,8 +2000,29 @@
       const kind = G.mode === 'local' ? (G.s.players.some(p => p.bot && p.bot.disguise) ? 'Quick Game (offline)' : 'Pass & Play') : G.s.players.some(p => p.bot && p.bot.disguise) ? 'Quick Game' : G.mode === 'host' ? 'online (captain)' : 'online';
       where = `Playing ${kind} · ${G.s.players.length} seats · round ${G.s.round}`;
     } else if (current === 'lobby' && Online.code) where = `In lobby ${Online.code} (${Online.seats.length} aboard)`;
+    if (G.watching) where = 'Watching a table (admin)';
+    // the table they're at: who's playing, the current wager, their own dice count (never their dice faces)
+    let game = null;
+    if (current === 'game' && G.s && !G.watching) {
+      const s = G.s, me = walletSeat();
+      game = { mode: G.mode, round: s.round, phase: s.phase, watchable: G.mode !== 'local',
+        bid: s.bid ? `${s.bid.qty} × ${s.bid.face}s by ${s.players[s.bid.by] ? s.players[s.bid.by].name : '?'}` : null,
+        turn: s.phase === 'bidding' && s.players[s.turn] ? s.players[s.turn].name : null,
+        seats: s.players.map((p, i) => ({ n: String(p.name).slice(0, 16), d: p.count != null ? p.count : p.dice.length, me: i === me, out: !!p.out })) };
+    }
     return { name: profile.name, account: Auth.me ? Auth.me.username : null, admin: Auth.isAdmin, where, room: Online.code || null,
-      coins: profile.coins, since: Live.since, mobile: document.body.classList.contains('mobile') };
+      coins: profile.coins, inv: Object.fromEntries(Object.entries(profile.inv || {}).filter(([, v]) => v > 0)),
+      since: Live.since, mobile: document.body.classList.contains('mobile'), device: deviceLine(), game, act: ActLog.slice(-8) };
+  }
+  /** "Chrome · Android · 412×915 · de" — enough to tell players apart, nothing identifying. */
+  function deviceLine() {
+    const ua = navigator.userAgent;
+    const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox\//.test(ua) ? 'Firefox'
+      : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+    const os = /iPhone/.test(ua) ? 'iPhone' : /iPad|Macintosh/.test(ua) && navigator.maxTouchPoints > 1 ? 'iPad' : /Android/.test(ua) ? 'Android'
+      : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : '';
+    const app = window.matchMedia && matchMedia('(display-mode: standalone)').matches ? ' · installed app' : '';
+    return [browser, os, `${screen.width}×${screen.height}`, (navigator.language || '').slice(0, 5)].filter(Boolean).join(' · ') + app;
   }
   function liveStart() {
     if (!Auth.enabled || !Auth.client || Live.ch) return;
@@ -1982,9 +2035,13 @@
   let liveLast = '';
   function liveTrack() {
     if (!Live.ch) return;
+    if (!Auth.client.getChannels().includes(Live.ch)) { Live.ch = null; liveLast = ''; liveStart(); return; }   // dropped somehow: rejoin
+    // Supabase closes the channel if presence updates come too fast, so send at most one every 15 s
+    const wait = 15000 - (Date.now() - (Live.sentAt || 0));
+    if (wait > 0) { if (!Live.later) Live.later = setTimeout(() => { Live.later = null; liveTrack(); }, wait); return; }
     const info = liveInfo(), sig = JSON.stringify(info);
     if (sig === liveLast) return;
-    liveLast = sig;
+    liveLast = sig; Live.sentAt = Date.now();
     Live.ch.track(info).catch(() => {});
   }
   setInterval(liveTrack, 5000);
@@ -2001,20 +2058,60 @@
     const signed = list.filter(x => x.account).length, playing = list.filter(x => /^Playing/.test(x.where || '')).length;
     $('#online-sum').innerHTML = `<b>${list.length}</b> online now · ${signed} signed in · ${list.length - signed} guest${list.length - signed === 1 ? '' : 's'} · ${playing} at a table`;
     const ago = t => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; };
+    const clock = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     $('#online-list').innerHTML = list.length ? list.map(x => {
-      const me = x.key === Live.key;
-      return `<div class="on-row">
-        <span class="on-dot"></span>
-        <span class="on-main"><b>${x.admin ? '👑 ' : ''}${esc(cleanName(x.account || x.name || '?'))}${me ? ' (you)' : ''}</b>
-          <small>${x.account ? '' : 'Guest · '}${esc(x.where || '')}${x.mobile ? ' · 📱' : ''} · on for ${ago(x.since || Date.now())} · 🪙 ${x.coins | 0}</small></span>
-        <span class="on-btns">${x.account && !me ? `
-          <button class="btn small" data-ogift="${esc(x.account)}" title="Gift 5 doubloons">🎁 +5</button>
-          <button class="btn small" data-oman="${esc(x.account)}" title="Gifts, goods, ban…">Manage</button>
-          <button class="btn small" data-okick="${esc(x.account)}" title="Send them back to the main menu">Kick</button>
-          ${x.admin ? '' : `<button class="btn small danger" data-oban="${esc(x.account)}">Ban</button>`}` : x.room && !me ? `<button class="btn small" data-ojoin="${esc(x.room)}">Join their lobby</button>` : ''}</span>
-      </div>`;
+      const me = x.key === Live.key, g = x.game;
+      const inv = Object.entries(x.inv || {}).map(([k, v]) => `${(shopItem(k) || {}).emoji || ''} ${v}`).join(' ');
+      const table = g ? `<div class="on-sec"><b>At the table</b> · round ${g.round | 0}${g.phase === 'reveal' ? ' · cups lifted' : g.phase === 'over' ? ' · game over' : ''}
+          ${g.bid ? `<br>Wager: ${esc(g.bid)}` : ''}${g.turn ? `<br>Turn: ${esc(g.turn)}` : ''}
+          <div class="on-seats">${(g.seats || []).map(p => `<span class="${p.me ? 'me' : ''} ${p.out ? 'out' : ''}">${esc(cleanName(p.n))} 🎲${p.d | 0}</span>`).join('')}</div></div>` : '';
+      const acts = (x.act || []).slice().reverse().map(a => `<li><small>${clock(a.at)}</small> ${esc(a.text)}</li>`).join('');
+      const canWatch = !me && x.room && (!g || g.watchable);
+      return `<details class="on-row" data-okey="${esc(x.key)}" ${Live.open.has(x.key) ? 'open' : ''}>
+        <summary><span class="on-dot"></span>
+          <span class="on-main"><b>${x.admin ? '👑 ' : ''}${esc(cleanName(x.account || x.name || '?'))}${me ? ' (you)' : ''}</b>
+            <small>${x.account ? '' : 'Guest · '}${esc(x.where || '')}${x.mobile ? ' · 📱' : ''} · on ${ago(x.since || Date.now())}</small></span>
+          <span class="on-more">▾</span></summary>
+        <div class="on-body">
+          <div class="on-sec"><b>Device</b> ${esc(x.device || '?')}</div>
+          <div class="on-sec"><b>Purse</b> 🪙 ${x.coins | 0}${inv ? ` · ${inv}` : ''}</div>
+          ${table}
+          ${acts ? `<div class="on-sec"><b>Recent activity</b><ul class="on-acts">${acts}</ul></div>` : ''}
+          <div class="on-btns">
+            ${canWatch ? `<button class="btn small primary" data-owatch="${esc(x.room)}" title="Spectate their table — they can't see you">👁 Watch</button>` : ''}
+            ${x.account && !me ? `
+            <button class="btn small" data-ogift="${esc(x.account)}" title="Gift 5 doubloons">🎁 +5</button>
+            <button class="btn small" data-oman="${esc(x.account)}" title="Gifts, goods, ban…">Manage</button>
+            <button class="btn small" data-okick="${esc(x.account)}" title="Send them back to the main menu">Kick</button>
+            ${x.admin ? '' : `<button class="btn small danger" data-oban="${esc(x.account)}">Ban</button>`}` : ''}
+            ${x.room && !me && !g ? `<button class="btn small" data-ojoin="${esc(x.room)}">Join their lobby</button>` : ''}
+          </div>
+        </div>
+      </details>`;
     }).join('') : '<p class="hint">Connecting…</p>';
   }
+  // remember which rows are opened across refreshes
+  $('#online-list').addEventListener('toggle', e => {
+    const d = e.target.closest('[data-okey]'); if (!d) return;
+    if (d.open) Live.open.add(d.dataset.okey); else Live.open.delete(d.dataset.okey);
+  }, true);
+  /** Admin: spectate the table hosted under this room code. */
+  function startWatch(code) {
+    if (!Auth.isAdmin) return;
+    closeDesk(); leaveQueue();
+    if (Online.role) leaveOnline();
+    if (G.s) endGame();
+    toast('👁 Rowing out to watch…');
+    Net.join(String(code).toUpperCase(), async () => {
+      Online.role = 'client'; Online.code = String(code).toUpperCase(); Online.watch = true;
+      let token = null;
+      try { token = await Auth.token(); } catch (_) {}
+      Net.send({ t: 'watch', token });
+      logAct('Started watching a table');
+    }, err => { toast(Net.describe(err), 4000); leaveOnline(); go('menu'); });
+  }
+  $('#watch-leave').addEventListener('click', () => { leaveOnline(); endGame(); go('menu'); openDesk(); setDeskTab('online'); });
+
   /** Leave a message for a player and nudge their open game to collect it. */
   async function adminSend(user, cmd, payload) {
     await Auth.admin.notify(user, cmd, payload);
@@ -2037,6 +2134,8 @@
         if (!confirm(`Ban ${d.oban}? They're signed out right away and can't sign in until unbanned.`)) return;
         await Auth.admin.setBan(d.oban, true); await adminSend(d.oban, 'ban', {});
         $('#adm-status').textContent = `${d.oban} is banned.`;
+      } else if (d.owatch) {
+        startWatch(d.owatch);
       } else if (d.ojoin) {
         closeDesk(); if (Online.role) leaveOnline(); if (G.s) endGame();
         go('online'); $('#join-code').value = d.ojoin; doJoin();
@@ -2133,18 +2232,26 @@
     if (!Net.available()) { toast('Online play is not available here (offline?)'); return; }
     leaveQueue();
     if (Online.role) leaveOnline();
-    Object.assign(Quick, { key: 'q' + Math.random().toString(36).slice(2, 10), joinedAt: Date.now(), matched: false, soloMs: 6000 + Math.random() * 9000 });
+    logAct('Joined the Quick Game queue');
+    Object.assign(Quick, { joinedAt: Date.now(), matched: false, active: true, soloMs: 6000 + Math.random() * 9000 });
     go('queue');
     $('#q-title').textContent = 'Searching the seas…'; $('#q-sub').textContent = 'Looking for pirates to play with';
     $('#q-bots').classList.add('hidden');
-    const ch = Auth.client.channel('bnb-quickplay-v1', { config: { presence: { key: Quick.key }, broadcast: { self: false } } });
-    Quick.ch = ch;
-    ch.on('presence', { event: 'sync' }, quickTick);
-    ch.on('broadcast', { event: 'match' }, ({ payload }) => onQuickMatch(payload));
-    ch.subscribe(async status => {
-      if (status === 'SUBSCRIBED') await ch.track({ name: profile.name, at: Quick.joinedAt, admin: Auth.isAdmin });
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') $('#q-sub').textContent = 'Having trouble reaching the queue — still trying…';
-    });
+    const me = () => ({ name: profile.name, at: Quick.joinedAt, admin: Auth.isAdmin });
+    // The queue channel is opened once and kept: closing a channel in supabase-js can also drop the
+    // "who's online" channel, so leaving the queue only withdraws our presence from it.
+    if (!Quick.ch) {
+      Quick.key = 'q' + Math.random().toString(36).slice(2, 10);
+      const ch = Auth.client.channel('bnb-quickplay-v1', { config: { presence: { key: Quick.key }, broadcast: { self: false } } });
+      Quick.ch = ch;
+      ch.on('presence', { event: 'sync' }, quickTick);
+      ch.on('broadcast', { event: 'match' }, ({ payload }) => onQuickMatch(payload));
+      ch.subscribe(async status => {
+        Quick.subscribed = status === 'SUBSCRIBED';
+        if (Quick.subscribed && Quick.active) await ch.track(me());
+        if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && Quick.active) $('#q-sub').textContent = 'Having trouble reaching the queue — still trying…';
+      });
+    } else if (Quick.subscribed) Quick.ch.track(me());
     Quick.timer = setInterval(quickTick, 1000);
   }
   function queueList() {
@@ -2154,7 +2261,7 @@
       .filter(x => x.at).sort((a, b) => a.at - b.at || (a.key < b.key ? -1 : 1));
   }
   function quickTick() {
-    if (!Quick.ch || Quick.matched || current !== 'queue') return;
+    if (!Quick.ch || !Quick.active || Quick.matched || current !== 'queue') return;
     const list = queueList();
     const n = Math.max(1, list.length);
     $('#q-count').textContent = n;
@@ -2193,7 +2300,7 @@
     });
   }
   function onQuickMatch(p) {
-    if (!p || !Array.isArray(p.members) || !p.members.includes(Quick.key) || Quick.matched) return;
+    if (!p || !Quick.active || !Array.isArray(p.members) || !p.members.includes(Quick.key) || Quick.matched) return;
     Quick.matched = true;
     $('#q-title').textContent = 'Crew found! ⚓'; $('#q-sub').textContent = 'Climbing aboard…';
     leaveQueue();
@@ -2204,8 +2311,8 @@
   }
   function leaveQueue() {
     clearInterval(Quick.timer); Quick.timer = null;
-    if (Quick.ch) { try { Quick.ch.untrack(); Auth.client.removeChannel(Quick.ch); } catch (_) {} }
-    Quick.ch = null;
+    if (Quick.active && Quick.ch) { try { Quick.ch.untrack(); } catch (_) {} }
+    Quick.active = false;
   }
   function quickCheckStart() {
     const humansJoined = Online.seats.filter(x => !x.bot && x.id !== 'host').length;
@@ -2267,7 +2374,7 @@
         store.set('bnb.daily', { last: todayUTC(), streak });
         profile.coins += reward;
       }
-      saveProfile(); Sfx.coin(); vibrate([40, 30, 80]);
+      saveProfile(); Sfx.coin(); vibrate([40, 30, 80]); logAct(`Opened the daily chest: day ${streak}, +${reward} 🪙`);
       btn.classList.add('opened');
       toast(`🧰 Day ${streak} chest: +${reward} doubloon${reward > 1 ? 's' : ''}! (🪙 ${profile.coins}) Come back tomorrow to keep the streak.`, 5000);
       setTimeout(() => { btn.classList.remove('opened'); renderDaily(); }, 900);

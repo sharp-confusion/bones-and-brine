@@ -701,3 +701,22 @@ body.mobile .g-bottom { padding-left: max(.7rem, env(safe-area-inset-left)); pad
 .on-main small { opacity: .8; }
 .on-btns { display: flex; gap: .3rem; flex-wrap: wrap; }
 @media (max-width: 520px) { .on-btns { width: 100%; } .on-btns .btn { flex: 1; } }
+
+/* ---------- admin: richer Online rows + spectating ---------- */
+details.on-row { display: block; padding: 0; }
+details.on-row > summary { list-style: none; display: flex; align-items: center; gap: .55rem; padding: .45rem .6rem; cursor: pointer; }
+details.on-row > summary::-webkit-details-marker { display: none; }
+details.on-row .on-more { transition: transform .2s; opacity: .7; }
+details.on-row[open] .on-more { transform: rotate(180deg); }
+.on-body { display: flex; flex-direction: column; gap: .45rem; padding: 0 .7rem .6rem 1.9rem; font-size: .9rem; }
+.on-sec b { margin-right: .3rem; }
+.on-seats { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
+.on-seats span { background: #0001; border-radius: 6px; padding: 0 .4em; }
+.on-seats span.me { background: var(--gold); font-weight: 800; }
+.on-seats span.out { opacity: .45; text-decoration: line-through; }
+.on-acts { margin: .2rem 0 0; padding-left: 1rem; max-height: 9.5rem; overflow-y: auto; }
+.on-acts small { opacity: .65; margin-right: .3rem; }
+.watch-banner { display: none; }
+body.watching .watch-banner { display: flex; align-items: center; justify-content: center; gap: .6rem; flex-wrap: wrap; position: fixed; top: max(6px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 60;
+  background: #2f1d52ee; color: #fff; border: 1px solid #a98ce8; border-radius: 30px; padding: .3rem .4rem .3rem 1rem; font-weight: 800; font-size: .88rem; box-shadow: 0 6px 18px #0008; max-width: calc(100% - 20px); text-align: center; }
+body.watching #g-controls, body.watching #g-taunt-btn, body.watching #g-items-btn, body.watching #g-admin-btn { display: none !important; }
