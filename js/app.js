@@ -45,6 +45,12 @@
     setTimeout(() => t.remove(), ms + 450);
   }
   function vibrate(p) { if (document.body.classList.contains('mobile') && navigator.vibrate) { try { navigator.vibrate(p); } catch (_) {} } }
+  // Running inside CrazyGames? (set by js/platform.js, which the CrazyGames build swaps in)
+  // There: no share/invite links (they'd point at the wrong site), no service worker, and chat follows
+  // the portal's "disable chat" setting.
+  const ON_CRAZY = window.BNB_PLATFORM === 'crazygames';
+  if (ON_CRAZY) document.body.classList.add('on-crazy');
+  if (ON_CRAZY && /[?&]disableChat=true\b/.test(location.search)) document.body.classList.add('no-chat');
   // Recent activity, shown to the admin in the Desk's Online tab (kept in memory only, never stored).
   const ActLog = [];
   function logAct(text) {
@@ -2432,6 +2438,30 @@
   ['#privacy-close', '#privacy-ok'].forEach(s => $(s).addEventListener('click', () => showPrivacy(false)));
   $('#privacy-overlay').addEventListener('click', e => { if (e.target.id === 'privacy-overlay') showPrivacy(false); });
 
+  // Impressum (§ 5 DDG), filled from js/config.js; hidden until name, address and email are set
+  (function impressum() {
+    const im = (window.BNB_CONFIG || {}).impressum || {};
+    const name = String(im.name || '').trim(), addr = String(im.address || '').trim(), mail = String(im.email || '').trim(), phone = String(im.phone || '').trim();
+    if (!(name && addr && mail)) return;
+    const lines = s => esc(s).replace(/\n/g, '<br>');
+    $('#imprint-body').innerHTML = `
+      <h3>Angaben gemäß § 5 DDG</h3>
+      <p>${esc(name)}<br>${lines(addr)}</p>
+      <h3>Kontakt</h3>
+      <p>E-Mail: <a href="mailto:${esc(mail)}">${esc(mail)}</a>${phone ? `<br>Telefon: ${esc(phone)}` : ''}</p>
+      <h3>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h3>
+      <p>${esc(name)}<br>${lines(addr)}</p>
+      <h3>Hinweis</h3>
+      <p>Bones &amp; Brine ist ein kostenloses, privates Hobbyprojekt ohne Werbung. Für Inhalte, die Spieler im Chat schreiben, sind die Spieler selbst verantwortlich. Rechtswidrige Nachrichten werden nach Kenntnis entfernt.</p>
+      <p class="hint">Legal notice: ${esc(name)}, ${esc(addr.replace(/\n/g, ', '))}. Contact: ${esc(mail)}.</p>`;
+    $('.imprint-link').classList.remove('hidden');
+    $('#privacy-contact').innerHTML = `Questions about your data, or want your account deleted? Email <a href="mailto:${esc(mail)}">${esc(mail)}</a> or tell the admin in a game, and it will be taken care of.`;
+    const show = on => $('#imprint-overlay').classList.toggle('hidden', !on);
+    $('#imprint-btn').addEventListener('click', () => { Sfx.click(); show(true); });
+    ['#imprint-close', '#imprint-ok'].forEach(s => $(s).addEventListener('click', () => show(false)));
+    $('#imprint-overlay').addEventListener('click', e => { if (e.target.id === 'imprint-overlay') show(false); });
+  })();
+
   // ---------- boot ----------
   window.addEventListener('avatar3d-ready', () => {
     renderMenuProfile();
@@ -2457,7 +2487,7 @@
   }
 
   // installable app + offline play
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !ON_CRAZY) {
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('service worker', e));
   }
 

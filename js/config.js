@@ -12,5 +12,13 @@ window.BNB_CONFIG = {
   // (the part before .metered.live) and the API key shown under "TURN Server" here.
   // This key is made to be used in web pages, so it's fine for it to be public.
   turnApp: '',
-  turnKey: ''
+  turnKey: '',
+  // Impressum (legal notice, required for public websites in Germany, § 5 DDG) and privacy contact.
+  // The Impressum link appears on the menu once name, address and email are filled in.
+  impressum: {
+    name: '',          // full name of the person responsible
+    address: '',       // street and number, postcode and town (use \n for new lines)
+    email: '',         // contact email (also used for privacy and account-deletion requests)
+    phone: ''          // optional
+  }
 };

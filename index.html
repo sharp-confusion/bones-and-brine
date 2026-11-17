@@ -65,7 +65,7 @@
         </select>
       </label>
       <span id="device-note"></span>
-      <p class="privacy-note">🔒 No ads, no trackers, nothing sold. To keep games fair and chat friendly, the ship's admin can see who's online and what's happening at the tables. <button class="linkish" id="privacy-btn">What exactly?</button></p>
+      <p class="privacy-note">🔒 No ads, no trackers, nothing sold. To keep games fair and chat friendly, the ship's admin can see who's online and what's happening at the tables. <button class="linkish" id="privacy-btn">What exactly?</button><span class="imprint-link hidden"> · <button class="linkish" id="imprint-btn">Impressum</button></span></p>
     </div>
   </div>
   <div class="waves" aria-hidden="true"></div>
@@ -368,11 +368,12 @@
     <p>We keep your username, password (encrypted), doubloons, goods, pirate look, daily-chest streak and dice won, so your progress follows you. Messages caught by the swear filter and reports you send or receive are kept so the admin can review them.</p>
     <h3>Guests</h3>
     <p>Playing as a guest keeps your pirate and purse on your own device only.</p>
-    <p class="hint">Want your account and its data deleted? Tell the admin (in a game chat, or with a report that says "delete my account") and it will be removed.</p>
+    <p class="hint" id="privacy-contact">Want your account and its data deleted? Tell the admin (in a game chat, or with a report that says "delete my account") and it will be removed.</p>
     <button class="btn primary" type="button" id="privacy-ok">Aye, got it</button>
   </div>
 </div>
 
+<div class="overlay privacy-overlay hidden" id="imprint-overlay" role="dialog" aria-modal="true" aria-label="Impressum">  <div class="sheet privacy-sheet">    <div class="desk-head"><h2>Impressum</h2><button class="icon-btn desk-close" type="button" id="imprint-close" aria-label="Close">✕</button></div>    <div id="imprint-body"></div>    <button class="btn primary" type="button" id="imprint-ok">Close</button>  </div></div>
 <div class="overlay report-overlay hidden" id="report-overlay" role="dialog" aria-modal="true" aria-label="Report a player">
   <form class="sheet report-sheet" id="report-form">
     <div class="desk-head"><h2>⚑ Report a pirate</h2><button class="icon-btn desk-close" type="button" id="report-close" aria-label="Close">✕</button></div>
@@ -432,6 +433,7 @@
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/platform.js"></script>
 <script src="js/config.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/bot.js"></script>

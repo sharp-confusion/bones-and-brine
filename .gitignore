@@ -2,3 +2,4 @@
 art/__pycache__/
 *.blend1
 Thumbs.db
+builds/

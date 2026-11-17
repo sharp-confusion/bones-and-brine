@@ -730,3 +730,8 @@ body.watching #g-controls, body.watching #g-taunt-btn, body.watching #g-items-bt
 .privacy-sheet ul { padding-left: 1.2rem; }
 .privacy-sheet .pv-good { background: #2f8f4e22; border-left: 4px solid #2f8f4e; border-radius: 8px; padding: .5rem .7rem; }
 .privacy-sheet .btn { align-self: center; margin-top: .3rem; }
+
+/* ---------- CrazyGames build ---------- */
+body.on-crazy #share-btn, body.on-crazy #rv-share, body.on-crazy #copy-link { display: none !important; }
+body.on-crazy .menu-row { grid-template-columns: 1fr; }
+body.no-chat [data-chat], body.no-chat #g-chat-btn, body.no-chat .chat-bubble { display: none !important; }

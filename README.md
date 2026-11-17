@@ -108,3 +108,7 @@ Things to know before a big launch:
 ## Running it locally
 
 Open `index.html` through any local web server (for example `npx serve .` or `python -m http.server`) and visit the address it prints.
+
+## CrazyGames build
+
+`bash tools/build-crazygames.sh` makes `builds/bones-and-brine-crazygames.zip` (upload it in the CrazyGames developer portal; `index.html` is at the root of the zip). The build hides the share and invite-link buttons, skips the offline service worker and install prompt, and hides chat when CrazyGames passes `disableChat=true`. Accounts, the Quick Game queue and the leaderboard are shared with the GitHub Pages version. Run the script again after each update and upload the new zip.
