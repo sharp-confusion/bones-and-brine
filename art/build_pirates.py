@@ -1598,6 +1598,10 @@ if PREVIEW:
         bpy.ops.render.render(write_still=True)
         for c in tmp:
             bpy.data.objects.remove(c)
+    if os.environ.get('BNB_COVER'):          # store cover art instead of the contact sheets (see art/cover_scene.py)
+        exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cover_scene.py'), encoding='utf-8').read())
+        render_covers(PREVIEW)
+        raise SystemExit(0)
     sheet('sheet_shop', [['base_deckhand', 'hair_crop', 'top_sailor', 'cos_nosering', 'table', 'arms_rest', 'cupbone_down'],
                          ['base_oldsalt', 'hair_long', 'top_corset', 'cos_anchor', 'table', 'arms_rest', 'cupbarrel_down'],
                          ['base_deckhand', 'hair_slick', 'top_furcloak', 'cos_sideburns', 'table', 'arms_rest', 'cupkraken_down'],
