@@ -580,7 +580,8 @@
       try { token = await Auth.token(); } catch (_) {}
       Net.send({ t: 'join', profile: myProfilePayload(), token });
       setStatus('Boarding…');
-    }, e => { $('#join-btn').disabled = false; setStatus(Net.describe(e)); leaveOnline(); });
+    }, e => { $('#join-btn').disabled = false; setStatus(Net.describe(e)); leaveOnline(); },
+    (n, max) => setStatus(`Still looking for ship ${code}… (try ${n} of ${max})`));
   }
   $('#join-btn').addEventListener('click', doJoin);
   $('#join-code').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
@@ -1211,7 +1212,11 @@
   }
   function seatPx() {
     const t = $('#g-table'), w = t.clientWidth || 800, h = t.clientHeight || 500;
-    return Math.round(Math.max(82, Math.min(150, Math.min(w, h * 1.3) / 4.6)));
+    // small phone tables shrink the portraits (down to 50px) so seats don't pile onto each other
+    // and the current wager in the middle stays readable; crowded tables shrink a little more
+    const n = G.s ? G.s.players.length : 4;
+    const fit = Math.min(w, h * 1.3) / (n > 4 ? 5 : 4.6);
+    return Math.round(Math.max(Math.min(w, h) < 420 ? 50 : 82, Math.min(150, fit)));
   }
   // --- item animations: each use is a loop of 3D poses that lasts until the item is finished ---------
   const P3 = (...parts) => 'parts:table,' + parts.join(',');
@@ -1434,7 +1439,8 @@
     if (s.phase !== 'bidding' && G.mode !== 'client' && isHotseat()) { el.innerHTML = '<span class="hand-hidden">All cups lifted!</span>'; return; }
     const can = s.phase === 'bidding' && controlSeat() === s.turn && controlSeat() === v;
     const area = Math.min(window.innerWidth, $('.g-bottom').clientWidth || window.innerWidth);
-    const size = mobile ? Math.max(30, Math.min(52, Math.floor((area - 30) / Math.max(5, p.dice.length) - 9))) : 54;
+    // on phones the dice also shrink with the screen height, so the controls don't swallow the table
+    const size = mobile ? Math.max(30, Math.min(52, Math.floor(window.innerHeight / (window.innerHeight < window.innerWidth ? 11 : 16)), Math.floor((area - 30) / Math.max(5, p.dice.length) - 9))) : 54;
     el.innerHTML = `<span class="lbl">Yer dice</span>` + p.dice.map((d, k) =>
       `<span class="hd ${can && Engine.matches(s, d, G.sel.face) ? 'match' : ''} ${G.rollAnim ? 'roll' : ''}" style="animation-delay:${k * 70}ms">${Dice.render(d, p.kit, size)}</span>`).join('');
   }

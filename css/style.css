@@ -768,3 +768,70 @@ body.on-crazy .menu-buttons [data-go="shop"] { grid-column: 1 / -1; }
 .ask-sheet p { margin: 0; font-size: 1.15rem; font-weight: 800; }
 .ask-btns { display: flex; gap: .6rem; justify-content: center; }
 .ask-btns .btn { flex: 1; }
+
+/* ---------- phones held upright: compact controls so the table stays visible ----------
+   Faces on one row, then [− n +] next to the Wager button, then Liar / Spot On side by side.
+   The bid builder and action row dissolve into one 6-column grid so the buttons can share rows. */
+@media (orientation: portrait) and (max-width: 700px) {
+  body.mobile .g-bottom { padding-top: .4rem; padding-bottom: max(.4rem, env(safe-area-inset-bottom)); gap: .3rem; }
+  body.mobile .g-hand { min-height: 0; }
+  body.mobile .g-controls { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; flex-direction: unset; }
+  body.mobile .g-controls.hidden { display: none; }
+  body.mobile .bid-builder, body.mobile .actions { display: contents; }
+  body.mobile .faces { grid-column: 1 / -1; order: 1; background: #0005; border: 1px solid #ffffff14; border-radius: 12px; padding: 3px; }
+  body.mobile .faces .die { max-width: 46px; }
+  body.mobile .qty { grid-column: span 2; order: 2; justify-content: space-between; gap: 2px; background: #0005; border: 1px solid #ffffff14; border-radius: 12px; padding: 0 3px; }
+  body.mobile .qty .btn.round { width: 40px; height: 40px; min-height: 0; font-size: 1.5rem; padding: 0; }
+  body.mobile .qty span { font-size: 1.9rem; min-width: 1.4ch; }
+  body.mobile .actions .btn { min-height: 48px; font-size: 1.15rem; line-height: 1.1; }
+  body.mobile #c-bid { grid-column: span 4; order: 3; }
+  body.mobile #c-liar { grid-column: span 3; order: 4; }
+  body.mobile #c-spot { grid-column: span 3; order: 5; }
+  body.mobile .actions:has(#c-spot.hidden) #c-liar { grid-column: 1 / -1; }
+  body.mobile .c-odds { grid-column: 1 / -1; order: 6; font-size: .78rem; line-height: 1.25; }
+  body.mobile .kbd-hint { display: none; }
+  /* speech bubbles: no long "thinking" lines that run off the screen edge */
+  body.mobile .s-bubble .tl { display: none; }
+  body.mobile .s-bubble { font-size: .9rem; padding: 1px 7px; }
+  body.mobile .s-bubble .die { width: 18px; height: 18px; }
+  body.mobile .seat { min-width: 0; }
+  body.mobile .s-name { font-size: .7rem; max-width: 84px; padding: 0 6px; }
+  body.mobile .mini { width: 8px; height: 8px; border-width: 1px; }
+  body.mobile .c-qty { font-size: 2.3rem; }
+  body.mobile .c-bid .die { width: 42px; height: 42px; }
+  body.mobile .c-label, body.mobile .c-by { font-size: .8rem; }
+  body.mobile .c-open { font-size: 1.15rem; }
+}
+/* short phones (browser bars eat the height): drop the extras */
+@media (orientation: portrait) and (max-width: 700px) and (max-height: 640px) {
+  body.mobile .c-odds { display: none; }
+  body.mobile .actions .btn { min-height: 44px; }
+  body.mobile .actions .btn small { display: none; }
+  body.mobile .faces .die { max-width: 40px; }
+  body.mobile .c-chips { display: none; }
+}
+/* ---------- phones held sideways: table left, compact controls right ----------
+   (repeats the column layout here because the general "minmax(0, 1fr)" rule above used to override it) */
+@media (orientation: landscape) and (max-height: 520px) {
+  #screen-game.active, body.mobile #screen-game.active { grid-template-columns: minmax(0, 1fr) clamp(250px, 42vw, 360px); grid-template-rows: auto auto minmax(0, 1fr); }
+  .g-top, .g-timer { grid-column: 1 / -1; }
+  .g-table-wrap { grid-row: 3; grid-column: 1; }
+  .g-bottom { grid-row: 3; grid-column: 2; overflow-y: auto; justify-content: center; border-top: 0; border-left: 3px solid #120a04; padding: .35rem .5rem; gap: .3rem; }
+  body.mobile .g-controls { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .3rem; max-width: none; }
+  body.mobile .g-controls.hidden { display: none; }
+  body.mobile .bid-builder, body.mobile .actions { display: contents; }
+  body.mobile .faces { grid-column: 1 / -1; order: 1; gap: 2px; }
+  body.mobile .faces .die { max-width: 38px; }
+  body.mobile .qty { grid-column: span 2; order: 2; justify-content: space-between; gap: 2px; }
+  body.mobile .qty .btn.round { width: 34px; height: 34px; min-height: 0; font-size: 1.3rem; padding: 0; }
+  body.mobile .qty span { font-size: 1.6rem; min-width: 1.4ch; }
+  body.mobile .actions .btn { min-height: 40px; font-size: 1.05rem; line-height: 1.1; }
+  body.mobile .actions .btn small { display: none; }
+  body.mobile #c-bid { grid-column: span 4; order: 3; }
+  body.mobile #c-liar { grid-column: span 3; order: 4; }
+  body.mobile #c-spot { grid-column: span 3; order: 5; }
+  body.mobile .actions:has(#c-spot.hidden) #c-liar { grid-column: 1 / -1; }
+  body.mobile .c-odds { grid-column: 1 / -1; order: 6; font-size: .75rem; }
+  body.mobile .kbd-hint, body.mobile .s-bubble .tl { display: none; }
+  body.mobile .g-hand { min-height: 0; }
+}

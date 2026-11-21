@@ -5,8 +5,10 @@
 const Net = (() => {
   const PREFIX = 'bonesbrine-liarsdice-v2-';
   const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const PING_MS = 4000, TIMEOUT_MS = 15000;
-  let peer = null, hostConn = null, beat = null, lastHost = 0;
+  // Phones pause pages that are in the background (sharing the room code over WhatsApp, a quick
+  // message, the screen dimming), so a player can go quiet for a while and still be there.
+  const PING_MS = 4000, TIMEOUT_MS = 30000;
+  let peer = null, hostConn = null, beat = null, lastHost = 0, lastTick = 0;
   const conns = new Map();
   const lastSeen = new Map();
   const h = {};
@@ -18,10 +20,20 @@ const Net = (() => {
     try { c.close(); } catch (_) {}
     h.disconnect && h.disconnect(id);
   }
+  // If our own page was asleep, every timer is late and everyone looks silent. That says nothing
+  // about the other players, so start counting again instead of dropping them.
+  function wokeUp(now) {
+    const slept = lastTick && now - lastTick > PING_MS * 2.5;
+    lastTick = now;
+    if (slept) { lastSeen.forEach((_, id) => lastSeen.set(id, now)); lastHost = now; }
+    return slept;
+  }
   function startHostBeat() {
     clearInterval(beat);
+    lastTick = Date.now();
     beat = setInterval(() => {
       const now = Date.now();
+      wokeUp(now);
       conns.forEach((c, id) => {
         if (now - (lastSeen.get(id) || now) > TIMEOUT_MS) lose(id);
         else if (c.open) c.send({ t: 'ping' });
@@ -30,14 +42,25 @@ const Net = (() => {
   }
   function startClientBeat() {
     clearInterval(beat);
-    lastHost = Date.now();
+    lastHost = lastTick = Date.now();
     beat = setInterval(() => {
       if (!hostConn) return;
-      if (Date.now() - lastHost > TIMEOUT_MS) { hostConn = null; clearInterval(beat); h.hostLost && h.hostLost(); }
+      const now = Date.now();
+      wokeUp(now);
+      if (now - lastHost > TIMEOUT_MS) { hostConn = null; clearInterval(beat); h.hostLost && h.hostLost(); }
       else if (hostConn.open) hostConn.send({ t: 'pong' });
     }, PING_MS);
   }
-  window.addEventListener('pagehide', () => { try { if (hostConn && hostConn.open) hostConn.send({ t: 'bye' }); } catch (_) {} });
+  window.addEventListener('pagehide', e => { if (e.persisted) return; try { if (hostConn && hostConn.open) hostConn.send({ t: 'bye' }); } catch (_) {} });
+  // back from the background: say hello straight away and get the signalling line back
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    wokeUp(now);
+    try { if (hostConn && hostConn.open) hostConn.send({ t: 'pong' }); } catch (_) {}
+    conns.forEach(c => { try { if (c.open) c.send({ t: 'ping' }); } catch (_) {} });
+    if (peer && peer.disconnected && !peer.destroyed) { try { peer.reconnect(); } catch (_) {} }
+  });
 
   // --- how browsers find a path to each other ---------------------------------------------------
   // STUN lets most players connect directly. Behind strict NATs (schools, offices, some mobile
@@ -79,13 +102,34 @@ const Net = (() => {
     }
   }
 
+  // Start once the relay list is in (or after 2.5 s without it), unless the player backed out meanwhile.
+  let session = 0;
+  function afterRelay(fn) {
+    const s = session; let done = false;
+    const run = () => { if (done || s !== session) return; done = true; fn(); };
+    setTimeout(run, 2500);
+    loadRelay().then(run, run);
+  }
+
   function host(onReady, onError, tries = 0) {
     close();
     if (!available()) return onError({ message: 'Online library failed to load (are ye offline?)' });
+    afterRelay(() => startHost(onReady, onError, tries));
+  }
+  function startHost(onReady, onError, tries) {
     const code = makeCode();
     const p = new Peer(PREFIX + code, peerOpts());
     peer = p;
-    p.on('open', () => { startHostBeat(); onReady(code); });
+    let ready = false, retry = null, retries = 0;
+    const giveUp = setTimeout(() => { if (!ready && peer === p) onError({ type: 'network' }); }, 20000);
+    // Losing the matchmaking server after the room is up does NOT end the game: players already
+    // aboard talk to us directly. Keep trying to get back on it so new players can still find us.
+    const redial = () => {
+      if (peer !== p || p.destroyed || !p.disconnected || retry) return;
+      retry = setTimeout(() => { retry = null; if (peer !== p || p.destroyed || !p.disconnected) return; retries++; try { p.reconnect(); } catch (_) {} redial(); },
+        Math.min(15000, 1000 * Math.pow(2, Math.min(retries, 4))));
+    };
+    p.on('open', () => { retries = 0; if (ready) return; ready = true; clearTimeout(giveUp); startHostBeat(); onReady(code); });
     p.on('connection', conn => {
       conn.on('open', () => { conns.set(conn.peer, conn); lastSeen.set(conn.peer, Date.now()); h.connect && h.connect(conn.peer); });
       conn.on('data', d => {
@@ -100,33 +144,70 @@ const Net = (() => {
     });
     p.on('error', e => {
       if (peer !== p) return;
-      if (e.type === 'unavailable-id' && tries < 4) return host(onReady, onError, tries + 1);
       if (e.type === 'peer-unavailable') return; // a guest vanished; harmless for host
+      if (ready) { redial(); return; }           // room already open: never close it over a server hiccup
+      clearTimeout(giveUp);
+      if (e.type === 'unavailable-id' && tries < 4) return host(onReady, onError, tries + 1);
       onError(e);
     });
-    p.on('disconnected', () => { if (peer === p) { try { p.reconnect(); } catch (_) {} } });
+    p.on('disconnected', () => { if (peer === p && ready) { try { p.reconnect(); } catch (_) {} redial(); } });
+    p.on('close', () => { clearTimeout(retry); clearTimeout(giveUp); });
   }
 
-  function join(code, onOpen, onError) {
+  function join(code, onOpen, onError, onRetry) {
     close();
     if (!available()) return onError({ message: 'Online library failed to load (are ye offline?)' });
-    const p = new Peer(peerOpts());
-    peer = p;
-    let opened = false;
-    const timer = setTimeout(() => { if (!opened && peer === p) onError({ type: 'peer-unavailable' }); }, 15000);
-    p.on('open', () => {
-      const c = p.connect(PREFIX + code, { reliable: true, serialization: 'json' });
-      hostConn = c;
-      c.on('open', () => { opened = true; clearTimeout(timer); startClientBeat(); onOpen(); });
-      c.on('data', d => {
-        if (hostConn !== c) return;
-        lastHost = Date.now();
-        if (d && d.t === 'ping') { c.send({ t: 'pong' }); return; }
-        h.data && h.data('host', d);
+    // wait (briefly) for the relay list first: on mobile data the relay is often the only way through
+    const go = () => {
+      const p = new Peer(peerOpts());
+      peer = p;
+      let opened = false, failed = false, attempt = 0, timer = null;
+      const fail = e => { if (opened || failed || peer !== p) return; failed = true; clearTimeout(timer); onError(e); };
+      // The host may be a phone that just stepped away (to send ye the code!) and is still getting
+      // back onto the matchmaking server, so "no ship found" is retried a few times before we give up.
+      const MAX_TRIES = 4;
+      // whatever happens, give a clear answer within 45 s instead of rowing forever
+      const giveUp = setTimeout(() => fail({ type: p.open ? 'peer-unavailable' : 'network' }), 45000);
+      p.on('close', () => clearTimeout(giveUp));
+      const dial = () => {
+        if (opened || failed || peer !== p || p.destroyed) return;
+        attempt++;
+        const c = p.connect(PREFIX + code, { reliable: true, serialization: 'json' });
+        hostConn = c;
+        clearTimeout(timer);
+        timer = setTimeout(() => { if (opened || hostConn !== c) return; try { c.close(); } catch (_) {} again({ type: 'peer-unavailable' }); }, 12000);
+        c.on('open', () => { if (hostConn !== c || opened) return; opened = true; clearTimeout(timer); clearTimeout(giveUp); startClientBeat(); onOpen(); });
+        c.on('data', d => {
+          if (hostConn !== c) return;
+          lastHost = Date.now();
+          if (d && d.t === 'ping') { c.send({ t: 'pong' }); return; }
+          h.data && h.data('host', d);
+        });
+        c.on('close', () => { if (opened && hostConn === c) { hostConn = null; clearInterval(beat); h.hostLost && h.hostLost(); } });
+      };
+      const again = e => {
+        if (opened || failed || peer !== p) return;
+        if (attempt >= MAX_TRIES) return fail(e);
+        if (onRetry) { try { onRetry(attempt + 1, MAX_TRIES); } catch (_) {} }
+        clearTimeout(timer);
+        timer = setTimeout(dial, 1500 * attempt);
+      };
+      p.on('open', () => { if (!opened && attempt === 0) dial(); });
+      p.on('error', e => {
+        if (peer !== p) return;
+        // Once aboard, the game runs over the direct line to the host. Trouble with the matchmaking
+        // server doesn't matter then; a real loss of the host is caught by the heartbeat.
+        if (opened) return;
+        if (e.type === 'peer-unavailable') return again(e);
+        if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(e.type) && attempt < MAX_TRIES) {
+          clearTimeout(timer); timer = setTimeout(() => { if (peer === p && p.disconnected && !p.destroyed) { try { p.reconnect(); } catch (_) {} } attempt++; again(e); }, 1500);
+          return;
+        }
+        fail(e);
       });
-      c.on('close', () => { if (opened && hostConn === c) { hostConn = null; h.hostLost && h.hostLost(); } });
-    });
-    p.on('error', e => { if (peer !== p) return; clearTimeout(timer); if (!opened) onError(e); else if (e.type !== 'peer-unavailable') { h.hostLost && h.hostLost(); } });
+      p.on('disconnected', () => { if (peer === p && !p.destroyed && !opened) { try { p.reconnect(); } catch (_) {} } });
+    };
+    afterRelay(go);
   }
 
   const send = msg => { if (hostConn && hostConn.open) hostConn.send(msg); };
@@ -135,6 +216,7 @@ const Net = (() => {
   function drop(id) { const c = conns.get(id); if (c) { conns.delete(id); lastSeen.delete(id); try { c.close(); } catch (_) {} } }
   function close() {
     const p = peer;
+    session++;
     clearInterval(beat);
     if (hostConn && hostConn.open) { try { hostConn.send({ t: 'bye' }); } catch (_) {} }
     peer = null; hostConn = null; conns.clear(); lastSeen.clear();
