@@ -124,8 +124,15 @@ const Auth = (() => {
     resolve: (id, status) => rpc('admin_resolve_report', { p_id: id, p_status: status }),
     chatRecord: u => rpc('admin_chat_record', { p_username: cleanUser(u) }),
     clearStrikes: u => rpc('admin_clear_strikes', { p_username: cleanUser(u) }),
-    notify: (u, cmd, payload) => rpc('admin_notify', { p_username: cleanUser(u), p_cmd: cmd, p_payload: payload || {} })
+    notify: (u, cmd, payload) => rpc('admin_notify', { p_username: cleanUser(u), p_cmd: cmd, p_payload: payload || {} }),
+    activity: (days = 7) => rpc('admin_activity', { p_days: days | 0 }).then(r => r || [])
   };
+  /** 7-day activity history (supabase/04_activity_history.sql): one ping per ~minute while the game is open. */
+  async function activityPing(visit) {
+    if (!enabled) return;
+    const { error } = await sb.rpc('activity_ping', { p_id: visit.id, p_visitor: visit.visitor, p_name: visit.name, p_device: visit.device, p_events: visit.events });
+    if (error) throw error;
+  }
   /** Collect (and clear) messages the admin left for me. */
   const takeMessages = () => (enabled && me) ? rpc('take_admin_messages', {}).then(r => r || []) : Promise.resolve([]);
 
@@ -154,7 +161,7 @@ const Auth = (() => {
 
   return {
     enabled, restore, signIn, signUp, signOut, save, flush, token, verify, admin, recordStrike, chatStatus, submitReport,
-    dailyReady, claimDaily, recordDiceWon, leaderboard, takeMessages,
+    dailyReady, claimDaily, recordDiceWon, leaderboard, takeMessages, activityPing,
     get client() { return sb; },
     get me() { return me; },
     get isAdmin() { return !!(me && me.is_admin); },

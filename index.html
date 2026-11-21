@@ -364,11 +364,12 @@
       <li>your browser, device type, screen size and language</li>
     </ul>
     <p>The admin can also quietly drop by an online table, like a referee watching a match, to check that everyone plays fair.</p>
-    <p class="pv-good">None of this is saved. It disappears the moment you close the game. The admin <b>cannot</b> see your location, your other tabs or anything outside this game, and the Admin Desk never shows your IP address.</p>
+    <p>The admin can also look back over the <b>past 7 days</b>: when you had the game open, for how long, and the same in-game moves listed above. Guests are told apart by a random id kept in their browser. Anything older than 7 days is deleted automatically.</p>
+    <p class="pv-good">The admin <b>cannot</b> see your location, your other tabs or anything outside this game, and the Admin Desk never shows your IP address.</p>
     <h3>If you make an account</h3>
     <p>We keep your username, password (encrypted), doubloons, goods, pirate look, daily-chest streak and dice won, so your progress follows you. Messages caught by the swear filter and reports you send or receive are kept so the admin can review them.</p>
     <h3>Guests</h3>
-    <p>Playing as a guest keeps your pirate and purse on your own device only.</p>
+    <p>Playing as a guest keeps your pirate and purse on your own device only. Only the 7-day activity history above is stored on the server.</p>
     <p class="hint" id="privacy-contact">Want your account and its data deleted? Tell the admin (in a game chat, or with a report that says "delete my account") and it will be removed.</p>
     <button class="btn primary" type="button" id="privacy-ok">Aye, got it</button>
   </div>
@@ -406,11 +407,21 @@
     <div class="tabs desk-tabs" role="tablist">
       <button class="tab" data-dtab="online" role="tab">🟢 Online <span class="count-pill live" id="desk-online-count">0</span></button>
       <button class="tab on" data-dtab="pirates" role="tab">🔎 Pirates</button>
+      <button class="tab" data-dtab="history" role="tab">📅 Week</button>
       <button class="tab" data-dtab="reports" role="tab">📥 Reports <span class="count-pill hidden" id="desk-report-count">0</span></button>
     </div>
     <div class="desk-pane" id="desk-pane-online" hidden>
       <div class="online-sum" id="online-sum"></div>
       <div id="online-list" class="online-list"></div>
+    </div>
+    <div class="desk-pane" id="desk-pane-history" hidden>
+      <div class="row tight hist-tools">
+        <input id="hist-filter" placeholder="Filter by name" maxlength="16" spellcheck="false" autocapitalize="none" autocorrect="off" aria-label="Filter by name">
+        <select id="hist-days" aria-label="How far back"><option value="7">7 days</option><option value="3">3 days</option><option value="1">24 hours</option></select>
+        <button class="btn small" id="hist-refresh" type="button">Refresh</button>
+      </div>
+      <div class="online-sum" id="hist-sum"></div>
+      <div id="hist-list" class="online-list"></div>
     </div>
     <div class="desk-pane" id="desk-pane-reports" hidden>
       <div class="row tight"><select id="rep-filter"><option value="open">Open</option><option value="reviewed">Reviewed</option><option value="dismissed">Dismissed</option><option value="all">All</option></select>

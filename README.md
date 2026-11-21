@@ -34,6 +34,8 @@ Sign-in with a username and password, cloud saves, and the admin are powered by 
 
 7. Run `supabase/03_daily_and_leaderboard.sql` too. It adds the daily chest, the leaderboard and the Admin Desk's live gifts, kicks and bans.
 
+8. Run `supabase/04_activity_history.sql` too. It adds the Admin Desk's **📅 Week** tab (7-day activity history).
+
 **Daily chest, leaderboard and sharing:**
 - **🧰 Daily chest** on the main menu: day 1–7 of a streak pays 1, 1, 2, 2, 3, 3 and 5 doubloons. Miss a day and the streak starts over. Guests get it too (saved on their device).
 - **🏆 Leaderboard**: most dice won (dice ye made other pirates lose), this week and all time. Signed-in players only.
@@ -41,6 +43,8 @@ Sign-in with a username and password, cloud saves, and the admin are powered by 
 - **Quick Game crewmates**: when the queue is quiet, the table fills with bots that look and play like real people (gamer-tag names, uneven think times, the odd "gg"). Only the admin sees them marked 🤖.
 
 **Admin Desk → 🟢 Online** shows everyone who has the game open right now (guests too). Tap a player for their device, purse, the table they are at (players, dice left, current wager, whose turn) and their recent activity. **👁 Watch** spectates their online table invisibly with every cup shown. Signed-in players can be gifted, managed, kicked to the menu or banned on the spot. Updates arrive every ~15 seconds (Supabase limits how often presence can change).
+
+**Admin Desk → 📅 Week** looks back over the past 7 days (or 3 days / 24 hours): everyone who had the game open, how long they were on (two open tabs aren't counted twice), a small bar per day, and each visit with its start and end time, device and everything they did. Signed-in players are grouped by username; guests by a random id their browser keeps. The game pings about once a minute while it's visible (a hidden tab doesn't count as online; coming back after 10+ minutes starts a new visit). Rows older than 7 days are deleted automatically.
 
 **Connection relay (TURN):** players on strict school, work or mobile networks sometimes can't connect to each other directly. Make a free account at https://www.metered.ca/stun-turn, create an app, and put its name and API key into `turnApp` / `turnKey` in `js/config.js`.
 

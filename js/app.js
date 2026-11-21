@@ -71,15 +71,50 @@
       o.querySelector('[data-a="1"]').focus();
     });
   }
-  // Recent activity, shown to the admin in the Desk's Online tab (kept in memory only, never stored).
+  // Recent activity, shown to the admin in the Desk's Online tab, and kept for 7 days for its 📅 Week tab.
   const ActLog = [];
   function logAct(text) {
     const last = ActLog[ActLog.length - 1];
     if (last && last.text === text && Date.now() - last.at < 3000) return;
-    ActLog.push({ at: Date.now(), text: String(text).slice(0, 90) });
+    const entry = { at: Date.now(), text: String(text).slice(0, 90) };
+    ActLog.push(entry);
     if (ActLog.length > 12) ActLog.shift();
+    Hist.pending.push(entry); if (Hist.pending.length > 120) Hist.pending.shift();
     try { liveTrack(); } catch (_) {}
   }
+
+  // 7-day history (supabase/04_activity_history.sql). Each visit is one row: when it started, when it was last seen
+  // and what happened. While the game is visible it pings about once a minute; hidden tabs don't count as online.
+  const Hist = { visit: null, pending: [], hiddenAt: 0, busy: false };
+  function newId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const b = new Uint8Array(16); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(b) : b.forEach((_, i) => { b[i] = Math.random() * 256; });
+    b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+    const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  function histVisit() {
+    const acct = Auth.me ? Auth.me.id : null, v = Hist.visit;
+    if (v && v.acct === acct && Date.now() - v.start < 20 * 3600e3) return v;   // signing in or out starts a new visit
+    let visitor = store.get('bnb.visitor', null);
+    if (typeof visitor !== 'string' || !visitor) { visitor = newId(); store.set('bnb.visitor', visitor); }
+    return (Hist.visit = { id: newId(), visitor, acct, start: Date.now() });
+  }
+  async function histSend(force) {
+    if (!Auth.enabled || Hist.busy || (document.hidden && !force)) return;
+    const v = histVisit(), events = Hist.pending.splice(0, 40);
+    Hist.busy = true;
+    try { await Auth.activityPing({ id: v.id, visitor: v.visitor, name: profile.name, device: deviceLine(), events }); }
+    catch (_) { Hist.pending.unshift(...events); if (Hist.pending.length > 120) Hist.pending.splice(0, Hist.pending.length - 120); }
+    Hist.busy = false;
+  }
+  setInterval(histSend, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { Hist.hiddenAt = Date.now(); histSend(true); return; }
+    if (Hist.hiddenAt && Date.now() - Hist.hiddenAt > 10 * 60000) Hist.visit = null;   // back after a long break: a new visit
+    histSend();
+  });
+  window.addEventListener('pagehide', () => histSend(true));
 
   // ---------- sound (synthesised, no files) ----------
   const Sfx = (() => {
@@ -2084,9 +2119,85 @@
     $('#desk-pane-reports').hidden = t !== 'reports';
     $('#desk-pane-pirates').hidden = t !== 'pirates';
     $('#desk-pane-online').hidden = t !== 'online';
+    $('#desk-pane-history').hidden = t !== 'history';
     if (t === 'reports') loadReports();
     if (t === 'online') renderOnline();
+    if (t === 'history') loadHistory();
   }
+
+  // --- Admin Desk: 📅 Week tab — who was online in the past days, how long, and what they did ---
+  const HistView = { rows: [], open: new Set(), loading: false };
+  const fmtDur = ms => { const m = Math.round(ms / 60000); return m < 1 ? '<1 min' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
+  const dayKey = t => { const d = new Date(t); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
+  const dayName = t => new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  const hhmm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  /** Time online without double-counting two tabs open at once: merge overlapping visits. */
+  function onlineMs(visits) {
+    const iv = visits.map(v => [v.start, Math.max(v.end, v.start + 30000)]).sort((a, b) => a[0] - b[0]);
+    let total = 0, cur = null;
+    for (const [s, e] of iv) { if (cur && s <= cur[1]) cur[1] = Math.max(cur[1], e); else { if (cur) total += cur[1] - cur[0]; cur = [s, e]; } }
+    return total + (cur ? cur[1] - cur[0] : 0);
+  }
+  async function loadHistory() {
+    if (!Auth.isAdmin || HistView.loading) return;
+    HistView.loading = true;
+    if (!HistView.rows.length) $('#hist-list').innerHTML = '<p class="hint">Loading…</p>';
+    try {
+      HistView.rows = (await Auth.admin.activity(Number($('#hist-days').value) || 7)).map(r => ({
+        ...r, start: Date.parse(r.started_at), end: Date.parse(r.last_seen), events: Array.isArray(r.events) ? r.events : [] }));
+      renderHistory();
+    } catch (err) {
+      $('#hist-list').innerHTML = `<p class="hint">${esc(/admin_activity|function/i.test(err.message) ? 'Run supabase/04_activity_history.sql in the Supabase SQL Editor to turn on the 7-day history.' : err.message)}</p>`;
+    }
+    HistView.loading = false;
+  }
+  function renderHistory() {
+    const days = Number($('#hist-days').value) || 7, q = $('#hist-filter').value.trim().toLowerCase();
+    // one entry per person: signed-in pirates by username, guests by the random id their browser keeps
+    const people = new Map();
+    for (const r of HistView.rows) {
+      const key = r.username ? 'u:' + r.username : 'g:' + r.visitor;
+      if (!people.has(key)) people.set(key, { key, username: r.username, admin: r.is_admin, names: new Set(), visits: [] });
+      const p = people.get(key); p.visits.push(r); if (r.name) p.names.add(cleanName(r.name));
+    }
+    let list = [...people.values()].map(p => ({ ...p, total: onlineMs(p.visits), last: Math.max(...p.visits.map(v => v.end)) }));
+    if (q) list = list.filter(p => [p.username || '', ...p.names].some(n => n.toLowerCase().includes(q)));
+    list.sort((a, b) => b.last - a.last);
+    const signed = list.filter(p => p.username).length, visits = list.reduce((n, p) => n + p.visits.length, 0);
+    $('#hist-sum').innerHTML = `<b>${list.length}</b> pirate${list.length === 1 ? '' : 's'} in the past ${days === 1 ? '24 hours' : days + ' days'} · ${signed} signed in · ${list.length - signed} guest${list.length - signed === 1 ? '' : 's'} · ${visits} visit${visits === 1 ? '' : 's'} · ${fmtDur(list.reduce((n, p) => n + p.total, 0))} in all`;
+    // the last `days` calendar days, oldest first, for the little bar strip on each row
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const strip = Array.from({ length: days }, (_, i) => today.getTime() - (days - 1 - i) * 864e5);
+    $('#hist-list').innerHTML = list.length ? list.map(p => {
+      const perDay = strip.map(d => onlineMs(p.visits.filter(v => dayKey(v.start) === dayKey(d))));
+      const peak = Math.max(...perDay, 1);
+      const bars = strip.map((d, i) => `<i title="${esc(dayName(d))}: ${perDay[i] ? fmtDur(perDay[i]) : 'not on'}" style="height:${perDay[i] ? Math.max(12, Math.round(perDay[i] / peak * 100)) : 0}%"></i>`).join('');
+      const byDay = new Map();
+      p.visits.slice().sort((a, b) => b.start - a.start).forEach(v => { const k = dayKey(v.start); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(v); });
+      const body = [...byDay.values()].map(vs => `<div class="hv-day"><div><b>${esc(dayName(vs[0].start))}</b> · ${fmtDur(onlineMs(vs))}</div>
+          ${vs.map(v => `<details class="hv-visit"><summary><span>${hhmm(v.start)}–${hhmm(v.end)}</span> <small>${fmtDur(v.end - v.start)} · ${v.events.length} thing${v.events.length === 1 ? '' : 's'} done ·${esc(v.device || '?')}</small></summary>
+            ${v.events.length ? `<ul class="on-acts">${v.events.map(a => `<li><small>${hhmm(a.at)}</small> ${esc(a.text)}</li>`).join('')}</ul>` : '<p class="hint">Just looked around: nothing recorded.</p>'}</details>`).join('')}</div>`).join('');
+      const names = [...p.names];                  // newest name first (rows arrive newest first)
+      const label = p.username || names[0] || 'Guest';
+      const aka = p.username || names.length < 2 ? '' : ` (also ${names.slice(1, 4).map(esc).join(', ')})`;
+      return `<details class="on-row hv-row" data-hkey="${esc(p.key)}" ${HistView.open.has(p.key) ? 'open' : ''}>
+        <summary><span class="hv-bars" aria-hidden="true">${bars}</span>
+          <span class="on-main"><b>${p.admin ? '👑 ' : ''}${esc(cleanName(label))}</b>
+            <small>${p.username ? '' : 'Guest' + aka + ' · '}${fmtDur(p.total)} online · ${p.visits.length} visit${p.visits.length === 1 ? '' : 's'} · last seen ${Date.now() - p.last < 3 * 60000 ? 'now' : dayKey(p.last) === dayKey(Date.now()) ? hhmm(p.last) : dayName(p.last) + ' ' + hhmm(p.last)}</small></span>
+          <span class="on-more">▾</span></summary>
+        <div class="on-body">${body}
+          ${p.username ? `<div class="on-btns"><button class="btn small" data-hman="${esc(p.username)}">Manage</button></div>` : ''}</div>
+      </details>`;
+    }).join('') : `<p class="hint">${q ? 'Nobody matches that name.' : 'Nobody yet. Visits show up here about a minute after someone opens the game.'}</p>`;
+  }
+  $('#hist-list').addEventListener('toggle', e => {
+    const d = e.target.closest('[data-hkey]'); if (!d || e.target !== d) return;
+    if (d.open) HistView.open.add(d.dataset.hkey); else HistView.open.delete(d.dataset.hkey);
+  }, true);
+  $('#hist-list').addEventListener('click', e => { const b = e.target.closest('[data-hman]'); if (b) { setDeskTab('pirates'); deskLookup(b.dataset.hman); } });
+  $('#hist-filter').addEventListener('input', renderHistory);
+  $('#hist-days').addEventListener('change', loadHistory);
+  $('#hist-refresh').addEventListener('click', loadHistory);
 
   // =====================================================================
   //  WHO'S ONLINE (Supabase Realtime presence) + live admin messages
@@ -2554,8 +2665,8 @@
         if (current === 'menu') go('account');
       } else if (me) applyAccount(me);
       else if (!store.get('bnb.guestOk', false) && current === 'menu') go('account');
-    }).catch(err => console.warn('account restore', err));
-  }
+    }).catch(err => console.warn('account restore', err)).finally(() => histSend());
+  } else histSend();                             // first 7-day history ping (after the sign-in check, so it's filed under the account)
 
   // installable app + offline play
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !ON_CRAZY) {
